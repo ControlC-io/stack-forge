@@ -48,5 +48,10 @@ Everything the wizard shows and everything the generators emit comes from data:
 Adding a technology means adding one `TechOption`. The UI, the dependency
 resolution, the `.env.example` and the summary panel all follow automatically.
 
-`label` and `description` are UI copy and are written in Spanish. `spec`, `notes`
-and `tasks` end up inside generated files and are written in English.
+`label` and `description` are UI copy and are translated (`{ es, en, fr }`, or a
+plain string for product names). `spec`, `notes` and `tasks` end up inside
+generated files and are always English — the interface language never changes
+what an agent reads.
+
+The interface language is switched from the header (ES / EN / FR) and persisted
+in `localStorage`. Chrome copy lives in the `UI` dictionary of `src/i18n/index.ts`.

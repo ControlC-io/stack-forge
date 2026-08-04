@@ -46,9 +46,14 @@ The data flow is one-way: `Blueprint` → `buildContext()` → generators →
   `T | undefined` and must be handled.
 - Tailwind CSS 4 configured with `@theme` in `src/index.css`. There is no
   `tailwind.config.js`; a config copied from a Tailwind 3 project is ignored.
-- **UI copy is Spanish, generated output is English.** On a `TechOption`,
-  `label`/`description` are UI-only; `spec`/`notes`/`tasks` land in generated
-  files and must be written in English. Code and comments are English.
+- **The UI is translated (es/en/fr), generated output is always English.** On a
+  `TechOption`, `label`/`description` are UI-only and are `I18nText`
+  (`{ es, en, fr }`, or a plain string when the term is a product name);
+  `spec`/`notes`/`tasks` land in generated files and must be English. Code and
+  comments are English.
+- Adding a UI string means adding a key to the `UI` dictionary in
+  `src/i18n/index.ts` with all three languages — the `satisfies` clause fails
+  the build if one is missing.
 - Adding a technology means adding one `TechOption` to `src/catalog/steps.ts` —
   never special-casing it in a component or a generator.
 - Every gotcha in `src/catalog/gotchas.ts` must be real: something that actually
