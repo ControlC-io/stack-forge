@@ -3,6 +3,8 @@ import { buildContext } from './context';
 import {
   generateAgentsMd,
   generateClaudeMd,
+  generateClaudePointer,
+  generateCursorPointer,
   generateCursorRules,
 } from './instructions';
 import {
@@ -16,7 +18,6 @@ import {
   generateEnvExample,
   generateNginxConf,
   generateNginxDockerfileProd,
-  generateReadme,
 } from './infra';
 import { generatePrompt } from './prompt';
 
@@ -27,21 +28,31 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
 
   files.push({ path: 'BOOTSTRAP_PROMPT.md', language: 'markdown', contents: generatePrompt(ctx) });
 
+  // With one agent, its own file holds the instructions. With two, AGENTS.md
+  // holds them once and the tool-specific files are pointers — three copies of
+  // the same rules is how they drift apart.
+  const shared = ctx.forClaude && ctx.forCursor;
+  if (shared) {
+    files.push({ path: 'AGENTS.md', language: 'markdown', contents: generateAgentsMd(ctx) });
+  }
   if (ctx.forClaude) {
-    files.push({ path: 'CLAUDE.md', language: 'markdown', contents: generateClaudeMd(ctx) });
+    files.push({
+      path: 'CLAUDE.md',
+      language: 'markdown',
+      contents: shared ? generateClaudePointer() : generateClaudeMd(ctx),
+    });
   }
   if (ctx.forCursor) {
     files.push({
       path: '.cursor/rules/project.mdc',
       language: 'markdown',
-      contents: generateCursorRules(ctx),
+      contents: shared ? generateCursorPointer(ctx) : generateCursorRules(ctx),
     });
   }
-  if (ctx.forClaude && ctx.forCursor) {
-    files.push({ path: 'AGENTS.md', language: 'markdown', contents: generateAgentsMd(ctx) });
-  }
 
-  files.push({ path: 'README.md', language: 'markdown', contents: generateReadme(ctx) });
+  // No README: the prompt already carries everything one would say, and its plan
+  // ends by telling the agent to write one — from the project that exists by
+  // then, not from a guess made before any code was written.
   files.push({ path: '.env.example', language: 'env', contents: generateEnvExample(ctx) });
 
   if (ctx.hasComposeDev) {

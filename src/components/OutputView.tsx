@@ -4,7 +4,8 @@ import type { Blueprint } from '@/catalog/types';
 import { generateFiles } from '@/generators';
 import { buildContext } from '@/generators/context';
 import { Quickstart } from './Quickstart';
-import { t, useLang } from '@/i18n';
+import { t, tx, useLang } from '@/i18n';
+import { GROUP_HINTS, GROUP_LABELS, grouped } from '@/lib/fileGroups';
 import { copyToClipboard, downloadFile, downloadZip } from '@/lib/download';
 import { cn, slugify } from '@/lib/utils';
 import { Button } from './ui';
@@ -53,21 +54,31 @@ export function OutputView({ blueprint }: { blueprint: Blueprint }) {
       <Quickstart ctx={ctx} />
 
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-        <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-          {files.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              onClick={() => setActivePath(f.path)}
-              className={cn(
-                'shrink-0 rounded-lg px-3 py-2 text-left font-mono text-xs transition-colors',
-                f.path === active.path
-                  ? 'bg-ink-800 text-accent'
-                  : 'text-ink-400 hover:bg-ink-850 hover:text-ink-200',
-              )}
-            >
-              {f.path}
-            </button>
+        <nav className="space-y-3">
+          {grouped(files).map(({ group, files: bucket }) => (
+            <div key={group} className="space-y-0.5">
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500">
+                {tx(GROUP_LABELS[group], lang)}
+              </p>
+              <p className="px-3 pb-1 text-[10px] leading-tight text-ink-600">
+                {tx(GROUP_HINTS[group], lang)}
+              </p>
+              {bucket.map((f) => (
+                <button
+                  key={f.path}
+                  type="button"
+                  onClick={() => setActivePath(f.path)}
+                  className={cn(
+                    'block w-full shrink-0 rounded-lg px-3 py-1.5 text-left font-mono text-xs transition-colors',
+                    f.path === active.path
+                      ? 'bg-ink-800 text-accent'
+                      : 'text-ink-400 hover:bg-ink-850 hover:text-ink-200',
+                  )}
+                >
+                  {f.path}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 

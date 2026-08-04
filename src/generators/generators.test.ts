@@ -227,15 +227,13 @@ describe('server sizing reaches the generated files', () => {
       prompt: files[0]!.contents,
       compose: files.find((f) => f.path === 'docker-compose.coolify.yml')!.contents,
       dockerfile: files.find((f) => f.path === 'backend/Dockerfile.prod')!.contents,
-      readme: files.find((f) => f.path === 'README.md')!.contents,
     };
   };
 
   it('reports the host size the user typed', () => {
-    const { prompt, readme } = build({ serverRamGb: '16', serverOtherGb: '6' });
+    const { prompt } = build({ serverRamGb: '16', serverOtherGb: '6' });
     expect(prompt).toContain('**16 GB**');
     expect(prompt).toContain('6 GB is already claimed by other stacks');
-    expect(readme).toContain('**16 GB**');
   });
 
   it('puts the computed limits in the compose file and the prompt, and they agree', () => {
@@ -282,7 +280,6 @@ describe('server sizing reaches the generated files', () => {
     const without = build({ serverSwap: false });
     expect(without.prompt).toContain('add one before the first deploy');
     expect(without.compose).toContain('no swap file');
-    expect(without.readme).toContain('there is none today');
 
     const withSwap = build({ serverSwap: true });
     expect(withSwap.prompt).toContain('Swap file on the host: **yes**');

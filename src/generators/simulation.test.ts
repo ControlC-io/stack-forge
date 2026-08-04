@@ -6,6 +6,7 @@ import { applyToggle, emptyBlueprint } from '@/lib/blueprint';
 import { generateFiles } from '.';
 import { buildContext, type Ctx } from './context';
 import { quickstart } from '@/lib/quickstart';
+import { grouped, groupOf } from '@/lib/fileGroups';
 
 /**
  * Whole-project simulations.
@@ -222,14 +223,15 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
   });
 
   it('documents the project it actually generated', () => {
-    const readme = file('README.md') ?? '';
-    expect(readme.includes('docker compose up --build')).toBe(ctx.hasComposeDev);
-    expect(readme.includes('docker-compose.coolify.yml')).toBe(ctx.hasCoolify);
+    const prompt = file('BOOTSTRAP_PROMPT.md') ?? '';
+    expect(prompt.includes('docker compose up --build')).toBe(ctx.hasComposeDev);
+    expect(prompt.includes('docker-compose.coolify.yml')).toBe(ctx.hasCoolify);
 
-    const claude = file('CLAUDE.md');
-    if (claude) {
-      expect(claude.includes('prisma:push')).toBe(ctx.hasDb);
-      expect(claude.includes('npx supabase')).toBe(ctx.hasSupabase);
+    // Whichever file carries the rules — AGENTS.md when two agents share them.
+    const instructions = file('AGENTS.md') ?? file('CLAUDE.md') ?? file('.cursor/rules/project.mdc');
+    if (instructions) {
+      expect(instructions.includes('prisma:push')).toBe(ctx.hasDb);
+      expect(instructions.includes('npx supabase')).toBe(ctx.hasSupabase);
     }
   });
 
@@ -299,6 +301,33 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
         expect(body.join('\n').trim().length, `${f.path}: "${heading}" is an empty section`).toBeGreaterThan(
           0,
         );
+      }
+    }
+  });
+
+  it('puts every file in exactly one group, and never duplicates one', () => {
+    const buckets = grouped(files);
+    const total = buckets.reduce((acc, b) => acc + b.files.length, 0);
+    expect(total, 'a file is missing from the grouping').toBe(files.length);
+    expect(new Set(files.map((f) => f.path)).size, 'duplicate path').toBe(files.length);
+  });
+
+  it('states the rules once, however many agents read them', () => {
+    // The reading burden is what matters, not the file count: exactly two
+    // documents carry content — the prompt and one instruction file. Any others
+    // are pointers to it.
+    const docs = files.filter((f) => groupOf(f) === 'documents');
+    expect(docs.some((f) => f.path === 'BOOTSTRAP_PROMPT.md')).toBe(true);
+
+    const substantial = docs.filter((f) => f.contents.length > 800);
+    expect(
+      substantial.map((f) => f.path),
+      'more than one instruction file carries the full rules',
+    ).toHaveLength(2);
+
+    if (docs.length > 2) {
+      for (const pointer of docs.filter((f) => !substantial.includes(f))) {
+        expect(pointer.contents, `${pointer.path} should point at the shared file`).toMatch(/AGENTS\.md/);
       }
     }
   });

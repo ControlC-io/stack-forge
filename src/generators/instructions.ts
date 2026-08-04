@@ -123,15 +123,45 @@ export function generateClaudeMd(ctx: Ctx): string {
   ]);
 }
 
+/**
+ * The single source of truth when more than one agent is in play.
+ *
+ * Three near-identical instruction files is how they drift: someone edits the
+ * one their tool reads, and the other agent keeps working from the old rules.
+ */
 export function generateAgentsMd(ctx: Ctx): string {
   return joinSections([
-    `# AGENTS.md\n\nShared instructions for any coding agent working in this repository.`,
+    `# AGENTS.md\n\nInstructions for any coding agent working in this repository.\nThis is the source of truth: \`CLAUDE.md\` and \`.cursor/rules/\` point here.`,
     `## Project overview\n\n**${ctx.name}** — ${ctx.meta.description.trim() || 'TODO: one-paragraph description.'}`,
     commandsSection(ctx),
+    gotchasSection(ctx),
     structureSection(ctx),
     constraintsSection(ctx),
-    `See \`CLAUDE.md\` for the full list of critical gotchas.`,
   ]);
+}
+
+/** What CLAUDE.md becomes when AGENTS.md exists. */
+export function generateClaudePointer(): string {
+  return `# CLAUDE.md
+
+The instructions for this repository live in **AGENTS.md**, so that every agent
+reads the same rules. Do not duplicate them here.
+
+@AGENTS.md
+`;
+}
+
+/** What the Cursor rule becomes when AGENTS.md exists. */
+export function generateCursorPointer(ctx: Ctx): string {
+  return `---
+description: Project rules for ${ctx.name}
+globs:
+alwaysApply: true
+---
+
+The instructions for this repository live in **AGENTS.md** at the repo root.
+Read it before making any change, and keep it as the only copy of these rules.
+`;
 }
 
 export function generateCursorRules(ctx: Ctx): string {
