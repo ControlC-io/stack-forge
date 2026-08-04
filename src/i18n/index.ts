@@ -193,6 +193,11 @@ const UI = {
     en: 'Generated files are always in English, whatever the interface language is.',
     fr: "Les fichiers générés sont toujours en anglais, quelle que soit la langue de l'interface.",
   },
+  quickstartTitle: {
+    es: 'Por dónde empezar',
+    en: 'Where to start',
+    fr: 'Par où commencer',
+  },
   downloadZip: { es: 'Descargar ZIP', en: 'Download ZIP', fr: 'Télécharger le ZIP' },
   copyPrompt: { es: 'Copiar prompt', en: 'Copy prompt', fr: 'Copier le prompt' },
   copy: { es: 'Copiar', en: 'Copy', fr: 'Copier' },

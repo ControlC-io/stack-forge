@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Check, Copy, Download, FileDown } from 'lucide-react';
 import type { Blueprint } from '@/catalog/types';
 import { generateFiles } from '@/generators';
+import { buildContext } from '@/generators/context';
+import { Quickstart } from './Quickstart';
 import { t, useLang } from '@/i18n';
 import { copyToClipboard, downloadFile, downloadZip } from '@/lib/download';
 import { cn, slugify } from '@/lib/utils';
@@ -10,6 +12,7 @@ import { Button } from './ui';
 export function OutputView({ blueprint }: { blueprint: Blueprint }) {
   const lang = useLang();
   const files = useMemo(() => generateFiles(blueprint), [blueprint]);
+  const ctx = useMemo(() => buildContext(blueprint), [blueprint]);
   const [activePath, setActivePath] = useState<string>(files[0]?.path ?? '');
   const [copied, setCopied] = useState(false);
 
@@ -46,6 +49,8 @@ export function OutputView({ blueprint }: { blueprint: Blueprint }) {
           </Button>
         </div>
       </header>
+
+      <Quickstart ctx={ctx} />
 
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
         <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">

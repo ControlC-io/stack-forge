@@ -153,7 +153,9 @@ Two things that must exist on the server and cannot live in a commit: a **swap f
   {
     id: 'coolify-healthcheck',
     title: 'Liveness probes must not touch the database',
-    when: ['infra-coolify'],
+    // Gated on the API, not on Coolify: a project whose only container is nginx
+    // has no startup sequence to get wrong, and this text would be noise.
+    when: ['backend-express'],
     body: `\`/api/health/live\` returns 200 from process state alone. A liveness probe that queries the DB turns a slow database into a restart loop, which makes the outage permanent.
 
 Give the backend a generous \`start_period\` (the entrypoint runs \`prisma db push\` + seed before listening), and make nginx \`depends_on\` the backend with \`condition: service_healthy\` — Traefik routes to nginx the moment it is up, so starting it first serves 502s on every redeploy.`,
@@ -170,7 +172,7 @@ In the Coolify UI: enable the Docker cleanup cron, and keep **"Delete Unused Vol
     id: 'coolify-build-args',
     title: 'Coolify injects env vars as build ARGs',
     when: ['infra-coolify'],
-    body: `A buildtime \`NODE_ENV=production\` makes \`npm install\` skip devDependencies, so \`tsc\`/\`prisma\` are missing and the build fails. Force \`ENV NODE_ENV=development\` in the builder stage and \`ENV NODE_ENV=production\` in the runtime stage.
+    body: `A buildtime \`NODE_ENV=production\` makes \`npm install\` skip devDependencies, so the build tools (starting with \`tsc\`) are missing and the build fails. Force \`ENV NODE_ENV=development\` in the builder stage and \`ENV NODE_ENV=production\` in the runtime stage.
 
 Coolify builds **on the production server**, next to the running containers: cap the build heap (\`NODE_OPTIONS=--max-old-space-size=1024\`) or the host OOM-killer takes down postgres mid-build. Serialise multiple frontend build stages for the same reason.
 

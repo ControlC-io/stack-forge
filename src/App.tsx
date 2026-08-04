@@ -119,7 +119,7 @@ export default function App() {
           <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-5">
             <div className="flex items-center gap-2">
               <Hammer className="size-5 text-accent" />
-              <span className="font-semibold text-ink-100">Stack Forge</span>
+              <span className="font-semibold text-ink-100">ControlC Stack Forge</span>
               <span className="hidden text-sm text-ink-500 sm:inline">{t('tagline', lang)}</span>
             </div>
 

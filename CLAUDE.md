@@ -4,7 +4,7 @@ Guidance for Claude Code when working on this repository.
 
 ## Project overview
 
-**Stack Forge** — a static React SPA that generates bootstrap material for new
+**ControlC Stack Forge** — a static React SPA that generates bootstrap material for new
 repositories: a prompt for Claude Code / Cursor, the agent instruction files
 (`CLAUDE.md`, `.cursor/rules/project.mdc`, `AGENTS.md`), and the matching Docker,
 nginx and Coolify configuration.

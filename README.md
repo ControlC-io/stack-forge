@@ -1,4 +1,4 @@
-# Stack Forge
+# ControlC Stack Forge
 
 A single-page form that turns a stack decision tree into the bootstrap material
 for a new repository: a prompt for Claude Code or Cursor, the agent instruction

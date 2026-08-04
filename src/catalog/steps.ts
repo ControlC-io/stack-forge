@@ -104,9 +104,8 @@ export const STEPS: Step[] = [
         ),
         spec: 'Self-hosted API: Express + PostgreSQL + MinIO in Docker behind nginx, deployed on Coolify',
         recommended: true,
-        notes: [
-          'Network topology: `dmz_net` (nginx, frontend) and `internal_net` (API, database, storage). Only nginx publishes host ports.',
-        ],
+        // No `notes`: the architecture section already draws this topology, and
+        // repeating it in the stack list is noise in a document meant to be read.
       },
       {
         id: 'stack-supabase',
@@ -385,7 +384,7 @@ export const STEPS: Step[] = [
           backendDev: ['typescript', 'ts-node-dev', '@types/express', '@types/cors', '@types/node'],
         },
         env: [{ key: 'PORT', value: '3000' }],
-        gotchas: ['ts-node-dev-windows'],
+        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck'],
         tasks: [
           'Build the API: one router per domain under `src/routes/`, zod validation at the edge, one centralised error handler.',
           'Expose `/api/health/live` (no database access) and `/api/health/ready` (checks dependencies).',
@@ -798,13 +797,9 @@ export const STEPS: Step[] = [
         ),
         spec: 'Production deployment on Coolify (multi-stage images, compose file with no custom networks)',
         locked: true,
-        gotchas: [
-          'coolify-no-networks',
-          'coolify-memory',
-          'coolify-healthcheck',
-          'coolify-logging',
-          'coolify-build-args',
-        ],
+        // coolify-healthcheck rides on the API option instead: a stack whose
+        // only container is nginx has no startup sequence to get wrong.
+        gotchas: ['coolify-no-networks', 'coolify-memory', 'coolify-logging', 'coolify-build-args'],
         tasks: [
           'Deploy on Coolify: point the resource at `docker-compose.coolify.yml`, set the domain on the nginx service, and paste the env vars into the UI.',
         ],

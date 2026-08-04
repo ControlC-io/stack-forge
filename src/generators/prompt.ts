@@ -77,15 +77,28 @@ Never re-verify the password to mint the JWT — the session is already proof.`
 }
 
 function planSection(ctx: Ctx): string {
-  const tasks: string[] = [];
-  tasks.push('Create the repository skeleton and commit the tooling config first (tsconfig, linting, Docker), so every later step runs in the real environment.');
-  for (const o of ctx.options) tasks.push(...(o.tasks ?? []));
-  if (ctx.hasComposeDev) {
-    tasks.push('`docker compose up --build` must bring the whole stack up from a clean checkout with only `.env` filled in. Verify it before writing feature code.');
-  }
+  // Phased, not just concatenated: deploying before the stack is verified
+  // locally is the single most expensive ordering mistake here.
+  const build = ctx.options.filter((o) => !o.id.startsWith('infra-')).flatMap((o) => o.tasks ?? []);
+  const deploy = ctx.options.filter((o) => o.id.startsWith('infra-')).flatMap((o) => o.tasks ?? []);
+
+  const tasks: string[] = [
+    'Create the repository skeleton and commit the tooling config first (tsconfig, linting, Docker), so every later step runs in the real environment.',
+    ...build,
+  ];
+
   if (ctx.hasCoolify) {
-    tasks.push('Ship the production compose file and multi-stage Dockerfiles in the same PR as the dev setup — retrofitting production later is how the memory and networking bugs below happen.');
+    tasks.push(
+      'Ship the production compose file and multi-stage Dockerfiles in the same PR as the dev setup — retrofitting production later is how the memory and networking bugs below happen.',
+    );
   }
+  if (ctx.hasComposeDev) {
+    tasks.push(
+      '`docker compose up --build` must bring the whole stack up from a clean checkout with only `.env` filled in. Verify this, and only then move on.',
+    );
+  }
+
+  tasks.push(...deploy);
   tasks.push('Write a README that documents: how to run it, the env vars, and the deployment steps.');
 
   return '## Implementation plan\n\n' + tasks.map((t, i) => `${i + 1}. ${t}`).join('\n');
@@ -170,6 +183,6 @@ end of this document are the reason.`,
     gotchaSection(ctx),
     acceptanceSection(ctx),
     extra ? `## Extra context from me\n\n${extra}` : '',
-    `---\n_Generated with Stack Forge._`,
+    `---\n_Generated with ControlC Stack Forge._`,
   ]);
 }
