@@ -1,0 +1,59 @@
+@import 'tailwindcss';
+
+/* Tailwind 4 is configured here, not in a JS file. These custom properties
+   generate the bg-ink-900 / text-accent / border-ink-700 utilities. */
+@theme {
+  --color-ink-950: #070a10;
+  --color-ink-900: #0c111a;
+  --color-ink-850: #10161f;
+  --color-ink-800: #141b26;
+  --color-ink-700: #1e2836;
+  --color-ink-600: #2b3749;
+  --color-ink-500: #46556c;
+  --color-ink-400: #7a8aa3;
+  --color-ink-300: #a8b5c8;
+  --color-ink-200: #ccd6e4;
+  --color-ink-100: #e8eef7;
+
+  --color-accent: #f2b134;
+  --color-accent-soft: #f9d888;
+  --color-accent-dim: #7a5a12;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-ink-950);
+  color: var(--color-ink-200);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #1a1200;
+}
+
+/* Scrollbars that do not fight the dark surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}

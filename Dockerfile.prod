@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+# Stack Forge is a static SPA: build it once, serve it from nginx.
+
+# ---- build ----
+FROM node:20-alpine AS build
+WORKDIR /app
+# Coolify injects env vars as build ARGs. A buildtime NODE_ENV=production would
+# make npm skip devDependencies (vite, typescript) and the build would fail.
+ENV NODE_ENV=development
+# Coolify builds on the production server, next to the running containers. Cap
+# the build heap so the host OOM-killer does not take a neighbour down.
+ENV NODE_OPTIONS=--max-old-space-size=768
+COPY package*.json ./
+RUN --mount=type=cache,id=npm-stack-forge,target=/root/.npm npm install --no-audit --no-fund
+COPY . .
+RUN npm run build
+
+# ---- runtime ----
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

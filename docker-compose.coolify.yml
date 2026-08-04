@@ -1,0 +1,35 @@
+# Production deployment for Coolify.
+#
+# ⚠️ NEVER declare a `networks:` block in this file.
+# Traefik (coolify-proxy) lives on the `coolify` network and Coolify attaches
+# this container to it. An extra network puts nginx on two networks at once;
+# Traefik then picks one non-deterministically and half of the container
+# recreations end in permanent 504s.
+#
+# Set the domain on the `web` service in the Coolify UI.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: stack_forge_web
+    restart: unless-stopped
+    # No `ports:` — Traefik owns 80/443.
+    expose:
+      - "80"
+    logging: *default-logging
+    mem_limit: 128m
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
