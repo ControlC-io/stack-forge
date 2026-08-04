@@ -92,13 +92,17 @@ export const STEPS: Step[] = [
     options: [
       {
         id: 'stack-fullstack',
-        label: L('API propia en tu VPS', 'Your own API on your VPS', 'Votre propre API sur votre VPS'),
-        description: L(
-          'Express + PostgreSQL + MinIO en Docker, detrás de nginx. Control total, sin coste por uso.',
-          'Express + PostgreSQL + MinIO in Docker, behind nginx. Full control, no usage billing.',
-          'Express + PostgreSQL + MinIO dans Docker, derrière nginx. Contrôle total, sans facturation à l’usage.',
+        label: L(
+          'API propia (VPS con Coolify)',
+          'Your own API (VPS running Coolify)',
+          'Votre propre API (VPS sous Coolify)',
         ),
-        spec: 'Self-hosted API: Express + PostgreSQL + MinIO in Docker behind nginx',
+        description: L(
+          'Express + PostgreSQL + MinIO en Docker detrás de nginx, desplegado en tu VPS con Coolify. Control total, sin coste por uso.',
+          'Express + PostgreSQL + MinIO in Docker behind nginx, deployed to your VPS with Coolify. Full control, no usage billing.',
+          'Express + PostgreSQL + MinIO dans Docker derrière nginx, déployé sur votre VPS avec Coolify. Contrôle total, sans facturation à l’usage.',
+        ),
+        spec: 'Self-hosted API: Express + PostgreSQL + MinIO in Docker behind nginx, deployed on Coolify',
         recommended: true,
         notes: [
           'Network topology: `dmz_net` (nginx, frontend) and `internal_net` (API, database, storage). Only nginx publishes host ports.',
@@ -108,9 +112,9 @@ export const STEPS: Step[] = [
         id: 'stack-supabase',
         label: 'Supabase',
         description: L(
-          'Postgres, Auth y Storage gestionados. El frontend habla directo con Supabase: no se genera API propia.',
-          'Managed Postgres, Auth and Storage. The frontend talks to Supabase directly: no API of your own is generated.',
-          'Postgres, Auth et Storage managés. Le frontend parle directement à Supabase : aucune API propre n’est générée.',
+          'Postgres, Auth y Storage gestionados. El frontend (estático, en tu VPS con Coolify) habla directo con Supabase: no se genera API propia.',
+          'Managed Postgres, Auth and Storage. The frontend (static, on your Coolify VPS) talks to Supabase directly: no API of your own is generated.',
+          'Postgres, Auth et Storage managés. Le frontend (statique, sur votre VPS Coolify) parle directement à Supabase : aucune API propre n’est générée.',
         ),
         spec: 'Supabase as the backend (managed Postgres, Auth and Storage); the frontend talks to it directly',
         notes: [
@@ -121,9 +125,9 @@ export const STEPS: Step[] = [
         id: 'stack-static',
         label: L('Sin backend', 'No backend', 'Sans backend'),
         description: L(
-          'SPA estática. Todo el estado en el navegador (localStorage). Sin datos compartidos entre dispositivos.',
-          'Static SPA. All state in the browser (localStorage). No data shared across devices.',
-          'SPA statique. Tout l’état dans le navigateur (localStorage). Aucune donnée partagée entre appareils.',
+          'SPA estática servida por nginx en tu VPS con Coolify. Todo el estado en el navegador: nada compartido entre dispositivos.',
+          'Static SPA served by nginx on your Coolify VPS. All state in the browser: nothing shared across devices.',
+          'SPA statique servie par nginx sur votre VPS Coolify. Tout l’état dans le navigateur : rien de partagé entre appareils.',
         ),
         spec: 'Static single-page app, no server and no database',
         notes: ['No backend: all state lives in the browser, so every feature must survive a hard refresh and a cleared storage.'],
@@ -132,9 +136,9 @@ export const STEPS: Step[] = [
         id: 'stack-api-only',
         label: L('Solo API, sin interfaz', 'API only, no interface', 'API seule, sans interface'),
         description: L(
-          'Servicio HTTP para workers, webhooks o integraciones internas.',
-          'HTTP service for workers, webhooks or internal integrations.',
-          'Service HTTP pour workers, webhooks ou intégrations internes.',
+          'Servicio HTTP en tu VPS con Coolify, para workers, webhooks o integraciones internas.',
+          'HTTP service on your Coolify VPS, for workers, webhooks or internal integrations.',
+          'Service HTTP sur votre VPS Coolify, pour workers, webhooks ou intégrations internes.',
         ),
         spec: 'Headless HTTP service, no user interface',
       },
