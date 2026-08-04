@@ -21,6 +21,27 @@ describe('selection rules', () => {
     }
   });
 
+  it('starts with every recommended option of the visible steps', () => {
+    const bp = emptyBlueprint();
+    for (const s of visibleSteps(bp.selection)) {
+      for (const option of s.options) {
+        if (!option.recommended || s.mode === 'single') continue;
+        expect(ids(bp).has(option.id), `${option.id} is recommended but not selected`).toBe(true);
+      }
+    }
+  });
+
+  it('does not change the selection on the first interaction', () => {
+    // A fresh blueprint and a touched one must agree about everything the user
+    // did not touch; otherwise the file list moves the moment you click.
+    const fresh = emptyBlueprint();
+    const touched = applyToggle(fresh, step('quality'), 'q-conventional');
+    for (const [stepId, chosen] of Object.entries(fresh.selection)) {
+      if (stepId === 'quality') continue;
+      expect(touched.selection[stepId], `step "${stepId}" changed on an unrelated click`).toEqual(chosen);
+    }
+  });
+
   it('refuses to unselect a locked option', () => {
     const bp = emptyBlueprint();
     const after = applyToggle(bp, step('database'), 'db-postgres-prisma');

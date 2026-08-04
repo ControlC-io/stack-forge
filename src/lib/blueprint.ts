@@ -34,20 +34,15 @@ export function ensureLocked(sel: Selection): Selection {
   return out;
 }
 
-/** Everything locked or marked `recommended` in a visible step. */
+/**
+ * Everything locked or marked `recommended` in a visible step.
+ *
+ * Delegates to normalize() rather than reimplementing the seeding rules: when
+ * the two drifted apart, a fresh blueprint silently disagreed with the same
+ * blueprint after one click.
+ */
 export function defaultSelection(): Selection {
-  let sel: Selection = {};
-  // Several passes: visibility of later steps depends on earlier answers.
-  for (let pass = 0; pass < 4; pass++) {
-    const next: Selection = ensureLocked(sel);
-    for (const step of visibleSteps(next)) {
-      if (next[step.id]?.length) continue;
-      const picks = step.options.filter((o) => o.recommended || o.locked).map((o) => o.id);
-      if (picks.length) next[step.id] = step.mode === 'single' ? picks.slice(0, 1) : picks;
-    }
-    sel = next;
-  }
-  return sel;
+  return normalize({ meta: { ...EMPTY_META }, selection: {}, touched: [] }).selection;
 }
 
 export function emptyBlueprint(): Blueprint {
