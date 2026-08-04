@@ -7,12 +7,14 @@ import { createContext, useContext } from 'react';
  * CLAUDE.md, compose files — is always English, because it is read by a coding
  * agent and lives in a repository whose code is English.
  */
-export const LANGS = ['es', 'en', 'fr'] as const;
+export const LANGS = ['en', 'es', 'fr'] as const;
 export type Lang = (typeof LANGS)[number];
 
+export const DEFAULT_LANG: Lang = 'en';
+
 export const LANG_LABELS: Record<Lang, string> = {
-  es: 'Español',
   en: 'English',
+  es: 'Español',
   fr: 'Français',
 };
 
@@ -24,7 +26,7 @@ export function tx(text: I18nText, lang: Lang): string {
   return text[lang] ?? text.en ?? text.es ?? text.fr ?? '';
 }
 
-export const LanguageContext = createContext<Lang>('es');
+export const LanguageContext = createContext<Lang>(DEFAULT_LANG);
 
 export function useLang(): Lang {
   return useContext(LanguageContext);

@@ -7,7 +7,16 @@ import { OutputView } from '@/components/OutputView';
 import { StepView } from '@/components/StepView';
 import { Summary } from '@/components/Summary';
 import { Button } from '@/components/ui';
-import { LANGS, LANG_LABELS, LanguageContext, t, tx, type I18nText, type Lang } from '@/i18n';
+import {
+  DEFAULT_LANG,
+  LANGS,
+  LANG_LABELS,
+  LanguageContext,
+  t,
+  tx,
+  type I18nText,
+  type Lang,
+} from '@/i18n';
 import { emptyBlueprint, loadBlueprint, saveBlueprint, toggle } from '@/lib/blueprint';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +29,7 @@ type Screen =
 
 function loadLang(): Lang {
   const stored = localStorage.getItem(LANG_KEY);
-  return LANGS.includes(stored as Lang) ? (stored as Lang) : 'es';
+  return LANGS.includes(stored as Lang) ? (stored as Lang) : DEFAULT_LANG;
 }
 
 export default function App() {

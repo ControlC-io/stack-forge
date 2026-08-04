@@ -58,7 +58,7 @@ export function MetaForm({ meta, onChange }: Props) {
         <Field label={t('fieldDomain', lang)} hint={t('domainHint', lang)}>
           <TextInput
             value={meta.domain}
-            placeholder="app.midominio.com"
+            placeholder="app.example.com"
             onChange={(e) => set('domain', e.target.value)}
           />
         </Field>
