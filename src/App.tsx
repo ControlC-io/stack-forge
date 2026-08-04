@@ -42,8 +42,9 @@ function loadLang(): Lang {
 function loadTheme(): Theme {
   const stored = localStorage.getItem(THEME_KEY);
   if (stored === 'dark' || stored === 'light') return stored;
-  // No stored choice: follow the OS.
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  // No stored choice: light. index.html stamps the same value on <html> so the
+  // first paint is already light and there is no flash of the dark ramp.
+  return 'light';
 }
 
 export default function App() {

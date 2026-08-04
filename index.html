@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,6 +8,16 @@
       name="description"
       content="Elige el stack de tu próximo proyecto y genera el prompt de arranque para Claude Code o Cursor."
     />
+    <script>
+      // Runs before first paint. Without it a returning user who picked dark
+      // gets a white flash until App.tsx mounts and stamps their choice.
+      try {
+        var t = localStorage.getItem('stack-forge.theme.v1');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) {
+        /* private mode: keep the light default */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
