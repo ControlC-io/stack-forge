@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Hammer, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Hammer, Moon, RotateCcw, Sun } from 'lucide-react';
 import { visibleSteps } from '@/catalog/steps';
 import type { Blueprint, ProjectMeta } from '@/catalog/types';
+import { has } from '@/catalog/types';
+import { buildContext } from '@/generators/context';
 import { MetaForm } from '@/components/MetaForm';
+import { ServerForm } from '@/components/ServerForm';
 import { OutputView } from '@/components/OutputView';
 import { StepView } from '@/components/StepView';
 import { Summary } from '@/components/Summary';
@@ -17,14 +20,18 @@ import {
   type I18nText,
   type Lang,
 } from '@/i18n';
-import { emptyBlueprint, loadBlueprint, saveBlueprint, toggle } from '@/lib/blueprint';
+import { applyToggle, emptyBlueprint, loadBlueprint, saveBlueprint } from '@/lib/blueprint';
 import { cn } from '@/lib/utils';
 
 const LANG_KEY = 'stack-forge.lang.v1';
+const THEME_KEY = 'stack-forge.theme.v1';
+
+type Theme = 'dark' | 'light';
 
 type Screen =
   | { kind: 'meta'; id: 'meta'; title: I18nText }
   | { kind: 'step'; id: string; title: I18nText }
+  | { kind: 'server'; id: 'server'; title: I18nText }
   | { kind: 'output'; id: 'output'; title: I18nText };
 
 function loadLang(): Lang {
@@ -32,10 +39,23 @@ function loadLang(): Lang {
   return LANGS.includes(stored as Lang) ? (stored as Lang) : DEFAULT_LANG;
 }
 
+function loadTheme(): Theme {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored === 'dark' || stored === 'light') return stored;
+  // No stored choice: follow the OS.
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => loadLang());
+  const [theme, setTheme] = useState<Theme>(() => loadTheme());
   const [blueprint, setBlueprint] = useState<Blueprint>(() => loadBlueprint());
   const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_KEY, theme);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     saveBlueprint(blueprint);
@@ -52,9 +72,15 @@ export default function App() {
       id: s.id,
       title: s.title,
     }));
+    // The host sizing screen only exists when there is something to deploy.
+    const server: Screen[] = has(blueprint.selection, 'infra-coolify')
+      ? [{ kind: 'server', id: 'server', title: { es: 'Servidor', en: 'Server', fr: 'Serveur' } }]
+      : [];
+
     return [
       { kind: 'meta', id: 'meta', title: { es: 'Proyecto', en: 'Project', fr: 'Projet' } },
       ...steps,
+      ...server,
       { kind: 'output', id: 'output', title: { es: 'Resultado', en: 'Result', fr: 'Résultat' } },
     ];
   }, [blueprint.selection]);
@@ -70,7 +96,7 @@ export default function App() {
     setBlueprint((bp) => {
       const step = visibleSteps(bp.selection).find((s) => s.id === stepId);
       if (!step) return bp;
-      return { ...bp, selection: toggle(bp.selection, step, optionId) };
+      return applyToggle(bp, step, optionId);
     });
   };
 
@@ -122,6 +148,16 @@ export default function App() {
                 ))}
               </div>
 
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                title={theme === 'dark' ? t('themeLight', lang) : t('themeDark', lang)}
+                aria-label={t('theme', lang)}
+              >
+                {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+              </Button>
+
               <Button variant="ghost" size="sm" onClick={reset}>
                 <RotateCcw className="size-3.5" /> {t('reset', lang)}
               </Button>
@@ -171,6 +207,14 @@ export default function App() {
                 step={step}
                 selection={blueprint.selection}
                 onToggle={(optionId) => handleToggle(step.id, optionId)}
+              />
+            ) : null}
+
+            {current.kind === 'server' ? (
+              <ServerForm
+                meta={blueprint.meta}
+                services={buildContext(blueprint).services}
+                onChange={setMeta}
               />
             ) : null}
 

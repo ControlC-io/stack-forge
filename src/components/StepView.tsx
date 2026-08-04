@@ -21,7 +21,11 @@ export function StepView({ step, selection, onToggle }: Props) {
         <h2 className="text-xl font-semibold text-ink-100">{tx(step.question, lang)}</h2>
         {step.help ? <p className="text-sm text-ink-400">{tx(step.help, lang)}</p> : null}
         <p className="text-xs text-ink-500">
-          {step.mode === 'single' ? t('chooseOne', lang) : t('chooseMany', lang)}
+          {step.options.some((o) => o.locked)
+            ? t('lockedHint', lang)
+            : step.mode === 'single'
+              ? t('chooseOne', lang)
+              : t('chooseMany', lang)}
         </p>
       </header>
 
@@ -35,20 +39,25 @@ export function StepView({ step, selection, onToggle }: Props) {
               ? `${t('incompatible', lang)} ${tx(conflict, lang)}`
               : '';
 
+          const locked = option.locked === true;
+
           return (
             <button
               key={option.id}
               type="button"
-              disabled={!enabled}
+              disabled={!enabled || locked}
               onClick={() => onToggle(option.id)}
               aria-pressed={isSelected}
               className={cn(
                 'group relative flex h-full flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
                 isSelected
-                  ? 'border-accent bg-accent/8 shadow-[inset_0_0_0_1px_rgba(242,177,52,0.25)]'
+                  ? 'border-accent bg-accent/8'
                   : 'border-ink-700 bg-ink-900 hover:border-ink-500 hover:bg-ink-850',
-                !enabled && 'cursor-not-allowed opacity-45 hover:border-ink-700 hover:bg-ink-900',
+                // Locked cards read as "already decided", not as "disabled":
+                // full contrast, no hover affordance, no greying out.
+                locked && 'cursor-default border-ink-600 bg-ink-850 opacity-100',
+                !enabled && !locked && 'cursor-not-allowed opacity-45 hover:border-ink-700 hover:bg-ink-900',
               )}
             >
               <span className="flex items-start justify-between gap-3">
@@ -57,10 +66,16 @@ export function StepView({ step, selection, onToggle }: Props) {
                   className={cn(
                     'mt-0.5 flex size-5 shrink-0 items-center justify-center border',
                     step.mode === 'single' ? 'rounded-full' : 'rounded-md',
-                    isSelected ? 'border-accent bg-accent text-ink-950' : 'border-ink-600',
+                    locked
+                      ? 'border-ink-500 bg-ink-700 text-ink-300'
+                      : isSelected
+                        ? 'border-accent bg-accent text-ink-950'
+                        : 'border-ink-600',
                   )}
                 >
-                  {!enabled ? (
+                  {locked ? (
+                    <Lock className="size-3" />
+                  ) : !enabled ? (
                     <Lock className="size-3 text-ink-500" />
                   ) : isSelected ? (
                     <Check className="size-3.5" strokeWidth={3} />
@@ -70,7 +85,11 @@ export function StepView({ step, selection, onToggle }: Props) {
 
               <span className="text-sm leading-relaxed text-ink-400">{tx(option.description, lang)}</span>
 
-              {option.recommended && !isSelected ? (
+              {locked ? (
+                <span className="mt-1 w-fit rounded border border-ink-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                  {t('locked', lang)}
+                </span>
+              ) : option.recommended && !isSelected ? (
                 <span className="mt-1 w-fit rounded border border-accent-dim px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                   {t('recommended', lang)}
                 </span>

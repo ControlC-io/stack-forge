@@ -1,3 +1,4 @@
+import { mb } from '@/lib/memory';
 import type { Ctx } from './context';
 
 /* ------------------------------------------------------------------ env --- */
@@ -36,7 +37,7 @@ export function generateComposeDev(ctx: Ctx): string {
   const services: string[] = [];
 
   if (ctx.hasPostgres) {
-    const image = ctx.has('db-postgres-pgvector') ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
+    const image = ctx.hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
     services.push(`  postgres:
     image: ${image}
     container_name: \${COMPOSE_PROJECT_NAME}_postgres
@@ -149,9 +150,11 @@ ${volumes.length ? '\nvolumes:\n' + volumes.join('\n') + '\n' : ''}`;
 
 export function generateComposeCoolify(ctx: Ctx): string {
   const services: string[] = [];
+  const { limits, nodeHeap, totalGb, otherGb, availableGb, warnings } = ctx.memory;
+  const limitOf = (id: keyof typeof limits, fallback: number) => mb(limits[id] ?? fallback);
 
   if (ctx.hasPostgres) {
-    const image = ctx.has('db-postgres-pgvector') ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
+    const image = ctx.hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
     services.push(`  postgres:
     image: ${image}
     container_name: ${ctx.slug}_postgres
@@ -163,7 +166,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
     volumes:
       - postgres_data:/var/lib/postgresql/data
     logging: *default-logging
-    mem_limit: 1g
+    mem_limit: ${limitOf('postgres', 1024)}
     # Docker defaults /dev/shm to 64 MB; large sorts and index builds overflow it
     # with "could not resize shared memory segment".
     shm_size: 256m
@@ -188,7 +191,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
     volumes:
       - minio_data:/data
     logging: *default-logging
-    mem_limit: 512m
+    mem_limit: ${limitOf('minio', 512)}
     stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -212,10 +215,10 @@ export function generateComposeCoolify(ctx: Ctx): string {
       PORT: 3000
       # Cap the V8 heap BELOW mem_limit so the GC reclaims instead of the kernel
       # OOM-killing the container (exit 137). Off-heap buffers need the slack.
-      NODE_OPTIONS: --max-old-space-size=768
+      NODE_OPTIONS: --max-old-space-size=${nodeHeap}
     env_file: .env
     logging: *default-logging
-    mem_limit: 1g
+    mem_limit: ${limitOf('backend', 1024)}
     stop_grace_period: 30s
     # Liveness only — a probe that queries the database turns a slow DB into a
     # restart loop. start_period is generous: the entrypoint runs schema push
@@ -228,6 +231,25 @@ export function generateComposeCoolify(ctx: Ctx): string {
       start_period: 120s${deps.length ? '\n    depends_on:\n' + deps.join('\n') : ''}`);
   }
 
+  if (ctx.services.has('email_service')) {
+    services.push(`  email_service:
+    build:
+      context: ./email_service
+      dockerfile: Dockerfile.prod
+    container_name: ${ctx.slug}_email
+    restart: unless-stopped
+    env_file: .env
+    logging: *default-logging
+    mem_limit: ${limitOf('email_service', 256)}
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s`);
+  }
+
   services.push(`  nginx:
     build:
       context: .
@@ -238,7 +260,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
     expose:
       - "80"
     logging: *default-logging
-    mem_limit: 128m
+    mem_limit: ${limitOf('nginx', 128)}
     stop_grace_period: 15s
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/nginx-health || exit 1"]
@@ -274,7 +296,13 @@ export function generateComposeCoolify(ctx: Ctx): string {
 #   - config baked into images (Coolify cannot see repo files at runtime)
 #   - the frontend is a static bundle served by nginx, not its own container
 #   - no host port bindings; nginx uses \`expose\`
-#   - per-service mem_limit sized against the cgroup, not the host
+#
+# MEMORY BUDGET — host: ${totalGb} GB total${otherGb > 0 ? `, ${otherGb} GB claimed by other stacks` : ''},
+# ~1.2 GB for the OS and Coolify itself, leaving ~${availableGb.toFixed(1)} GB for this stack.
+# The limits below are ceilings, not reservations: a service that exceeds ITS OWN
+# mem_limit is OOM-killed (exit 137) even with GB free on the box. Diagnose with
+# \`dmesg | grep -i oom\` and by telling exit 137 (kernel) from exit 1 (app).
+${warnings.map((w) => `# ⚠️ ${w.replace(/\n/g, ' ')}`).join('\n') || '#'}
 
 # Docker's default json-file driver grows without bound. A full disk takes
 # postgres — and therefore everything — down.
@@ -318,7 +346,7 @@ WORKDIR /app
 ENV NODE_ENV=development
 # Coolify builds ON the production server, beside the running containers. Cap
 # the build heap or the host OOM-killer takes down the database mid-build.
-ENV NODE_OPTIONS=--max-old-space-size=1024
+ENV NODE_OPTIONS=--max-old-space-size=${ctx.memory.buildHeap}
 COPY package*.json ./
 RUN --mount=type=cache,id=npm-backend,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
@@ -363,7 +391,7 @@ FROM node:20-alpine AS frontend
 WORKDIR /app
 # Same reason as the backend image: Coolify may inject NODE_ENV=production.
 ENV NODE_ENV=development
-ENV NODE_OPTIONS=--max-old-space-size=1024
+ENV NODE_OPTIONS=--max-old-space-size=${ctx.memory.buildHeap}
 COPY frontend/package*.json ./
 RUN --mount=type=cache,id=npm-frontend,target=/root/.npm npm ci --no-audit --no-fund
 COPY frontend/ ./
@@ -543,7 +571,11 @@ Deployed with Coolify from \`docker-compose.coolify.yml\`.
 2. Set the compose file to \`docker-compose.coolify.yml\`.
 3. Paste \`.env\` into the Coolify environment editor.
 4. Set the domain **on the nginx service**.
-5. On the server: make sure a swap file exists and database backups are scheduled — neither can live in this repo.` : `
+5. On the server: make sure a swap file exists${ctx.memory.swap ? '' : ' (there is none today)'} and database backups are scheduled — neither can live in this repo.
+
+The compose file is sized for a **${ctx.memory.totalGb} GB** host${ctx.memory.otherGb > 0 ? ` shared with ${ctx.memory.otherGb} GB of other stacks` : ''}. If you move
+to a different machine, recompute the limits: a container that exceeds its own
+\`mem_limit\` dies with exit 137 no matter how much RAM the box has.` : `
 
 TODO: describe the deployment.`}
 `;

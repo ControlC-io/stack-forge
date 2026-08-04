@@ -31,6 +31,19 @@ npm run build              # tsc → dist/
 \`\`\``);
   }
 
+  if (ctx.hasSupabase) {
+    blocks.push(`### Supabase
+
+\`\`\`bash
+npx supabase migration new <name>   # every schema change starts here
+npx supabase db push                # apply migrations to the linked project
+npx supabase gen types typescript --linked > src/lib/database.types.ts
+\`\`\`
+
+Never change the schema only from the dashboard: the repo stops describing
+production and the next deploy silently disagrees with it.`);
+  }
+
   if (ctx.hasFrontend) {
     blocks.push(`### Frontend (\`frontend/\`)
 
@@ -76,7 +89,18 @@ function constraintsSection(ctx: Ctx): string {
     rules.push('Raw SQL: always quote camelCase columns, always `text[]` and never `uuid[]`.');
     rules.push('`$executeRaw` for void-returning functions, `$queryRaw` for result-returning ones.');
   }
-  if (ctx.hasCoolify) rules.push('Never add a `networks:` block to the Coolify compose file.');
+  if (ctx.hasCoolify) {
+    rules.push('Never add a `networks:` block to the Coolify compose file.');
+    rules.push(
+      `Never raise a \`mem_limit\` without lowering another: the host has ${ctx.memory.totalGb} GB and the limits already add up to what is available.`,
+    );
+  }
+  if (ctx.hasSupabase) {
+    rules.push('Every table has RLS enabled with an explicit policy. The `service_role` key never leaves the server.');
+  }
+  if (ctx.has('feat-ai')) {
+    rules.push('Model keys stay in backend env vars; the model id is configuration, never hard-coded.');
+  }
   return '## Constraints\n\n' + rules.map((r) => `- ${r}`).join('\n');
 }
 

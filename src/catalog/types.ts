@@ -44,6 +44,12 @@ export interface TechOption {
   /** English one-liner used in generated artifacts. Falls back to `label`. */
   spec?: string;
   recommended?: boolean;
+  /**
+   * Part of the stack baseline: always selected, cannot be toggled off. These
+   * are shown so the user understands what they are getting, not so they can
+   * choose — the whole point of the template is that these decisions are made.
+   */
+  locked?: boolean;
   /** Option ids that must ALL be selected for this option to be pickable. */
   requires?: string[];
   /** Option ids that make this one impossible. */
@@ -78,11 +84,23 @@ export interface ProjectMeta {
   domain: string;
   httpPort: string;
   extraContext: string;
+  /** Coolify host sizing — drives every mem_limit in the production compose. */
+  serverRamGb: string;
+  /** GB already claimed on that host by other stacks. */
+  serverOtherGb: string;
+  /** Whether a swap file exists on the host. */
+  serverSwap: boolean;
 }
 
 export interface Blueprint {
   meta: ProjectMeta;
   selection: Selection;
+  /**
+   * Step ids the user has actually interacted with. Steps revealed by a later
+   * branch arrive with their defaults; a step the user emptied on purpose stays
+   * empty.
+   */
+  touched: string[];
 }
 
 export interface GeneratedFile {

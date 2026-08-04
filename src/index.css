@@ -24,6 +24,28 @@
   --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
 }
 
+/* Light theme: the same token names, inverted ramp. Every utility in the app
+   resolves through these variables, so nothing else needs a `dark:` variant.
+   The theme is stamped on <html> as data-theme by App.tsx. */
+:root[data-theme='light'] {
+  --color-ink-950: #f5f7fa;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f1f4f9;
+  --color-ink-800: #e7ecf3;
+  --color-ink-700: #d6dde8;
+  --color-ink-600: #bcc6d5;
+  --color-ink-500: #7c8798;
+  --color-ink-400: #58637a;
+  --color-ink-300: #3c465c;
+  --color-ink-200: #232c40;
+  --color-ink-100: #0e1524;
+
+  /* Amber on white needs to go darker to stay readable. */
+  --color-accent: #a76a05;
+  --color-accent-soft: #c98a17;
+  --color-accent-dim: #e2c489;
+}
+
 html,
 body,
 #root {

@@ -1,4 +1,5 @@
 import { tx } from '@/i18n';
+import { mb } from '@/lib/memory';
 import type { Ctx } from './context';
 import { joinSections } from './context';
 
@@ -15,6 +16,22 @@ function stackSection(ctx: Ctx): string {
 }
 
 function architectureSection(ctx: Ctx): string {
+  if (ctx.hasSupabase) {
+    return `## Architecture
+
+\`\`\`
+Browser ──▶ nginx (static bundle)
+   └──────▶ Supabase  (Postgres + Auth${ctx.has('sb-storage') ? ' + Storage' : ''})
+\`\`\`
+
+There is no server of yours in this picture. The browser holds the anon key and
+talks to Postgres directly, so **every access rule is a Row Level Security
+policy** — there is no middleware layer to fall back on. Treat the database
+schema and its policies as the security boundary, and keep them in
+\`supabase/migrations/\` so the repository, not the dashboard, is the source of
+truth.`;
+  }
+
   if (!ctx.hasNginx && !ctx.hasBackend) {
     return `## Architecture
 
@@ -97,12 +114,38 @@ function gotchaSection(ctx: Ctx): string {
   return `## Known traps (already paid for — do not rediscover them)\n\n${body}`;
 }
 
+function budgetSection(ctx: Ctx): string {
+  if (!ctx.hasCoolify) return '';
+  const { totalGb, otherGb, availableGb, limits, nodeHeap, buildHeap, swap, warnings } = ctx.memory;
+  const rows = Object.entries(limits)
+    .map(([service, value]) => `| \`${service}\` | ${mb(value)} |`)
+    .join('\n');
+
+  return `## Production budget
+
+The target host has **${totalGb} GB** of RAM${otherGb > 0 ? `, of which ${otherGb} GB is already claimed by other stacks` : ''}. After the OS and
+Coolify's own containers (~1.2 GB), roughly **${availableGb.toFixed(1)} GB** is available to this project.
+
+| Service | mem_limit |
+|---|---|
+${rows}
+
+The API's V8 heap is capped at **${nodeHeap} MB**, below its container limit, so the
+garbage collector reclaims instead of the kernel OOM-killing the container. Build
+stages are capped at **${buildHeap} MB** because Coolify builds on the production
+server, next to the running containers.
+
+Swap file on the host: **${swap ? 'yes' : 'NO — add one before the first deploy'}**.
+${warnings.length ? '\n' + warnings.map((w) => `> ⚠️ ${w}`).join('\n\n') : ''}`;
+}
+
 function acceptanceSection(ctx: Ctx): string {
   const checks: string[] = [];
   if (ctx.hasComposeDev) checks.push('`docker compose up --build` from a clean clone brings every service to healthy.');
   if (ctx.hasBackend) checks.push('`/api/health/live` returns 200 without touching the database.');
   if (ctx.hasFrontend) checks.push('The frontend builds (`npm run build`) with no TypeScript errors.');
-  if (ctx.has('auth-better-auth-jwt') || ctx.has('auth-better-auth')) checks.push('Sign-up, sign-in, refresh and sign-out all work end to end in the browser.');
+  if (ctx.has('auth-better-auth-jwt')) checks.push('Sign-up, sign-in, refresh and sign-out all work end to end in the browser.');
+  if (ctx.has('sb-rls')) checks.push('Every table has RLS enabled and an explicit policy per operation, verified while signed in as a normal user (not from the dashboard SQL editor).');
   if (ctx.hasCoolify) checks.push('The production compose file declares no `networks:` block and every service has `mem_limit`, log rotation and a healthcheck.');
   checks.push('The README lets someone who has never seen the repo run it in under ten minutes.');
   return '## Definition of done\n\n' + checks.map((c) => `- [ ] ${c}`).join('\n');
@@ -123,6 +166,7 @@ end of this document are the reason.`,
     stackSection(ctx),
     planSection(ctx),
     conventionsSection(ctx),
+    budgetSection(ctx),
     gotchaSection(ctx),
     acceptanceSection(ctx),
     extra ? `## Extra context from me\n\n${extra}` : '',

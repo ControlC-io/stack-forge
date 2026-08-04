@@ -12,17 +12,37 @@ export const EMPTY_META: ProjectMeta = {
   domain: '',
   httpPort: '80',
   extraContext: '',
+  serverRamGb: '4',
+  serverOtherGb: '0',
+  serverSwap: true,
 };
 
-/** Everything marked `recommended` in a visible step, resolved iteratively. */
+/**
+ * Baseline options are always on: they are the template's opinion, not a
+ * question. Called after every mutation so a stored blueprint from an older
+ * catalog version still comes back consistent.
+ */
+export function ensureLocked(sel: Selection): Selection {
+  const out: Selection = { ...sel };
+  for (const step of visibleSteps(out)) {
+    const locked = step.options.filter((o) => o.locked).map((o) => o.id);
+    if (!locked.length) continue;
+    const current = out[step.id] ?? [];
+    const missing = locked.filter((id) => !current.includes(id));
+    if (missing.length) out[step.id] = [...missing, ...current];
+  }
+  return out;
+}
+
+/** Everything locked or marked `recommended` in a visible step. */
 export function defaultSelection(): Selection {
   let sel: Selection = {};
-  // Two passes: visibility of later steps depends on earlier answers.
-  for (let pass = 0; pass < 3; pass++) {
-    const next: Selection = { ...sel };
+  // Several passes: visibility of later steps depends on earlier answers.
+  for (let pass = 0; pass < 4; pass++) {
+    const next: Selection = ensureLocked(sel);
     for (const step of visibleSteps(next)) {
       if (next[step.id]?.length) continue;
-      const picks = step.options.filter((o) => o.recommended).map((o) => o.id);
+      const picks = step.options.filter((o) => o.recommended || o.locked).map((o) => o.id);
       if (picks.length) next[step.id] = step.mode === 'single' ? picks.slice(0, 1) : picks;
     }
     sel = next;
@@ -31,7 +51,7 @@ export function defaultSelection(): Selection {
 }
 
 export function emptyBlueprint(): Blueprint {
-  return { meta: { ...EMPTY_META }, selection: defaultSelection() };
+  return { meta: { ...EMPTY_META }, selection: defaultSelection(), touched: [] };
 }
 
 /** All option ids currently selected, across visible steps only. */
@@ -79,10 +99,20 @@ export function availability(option: TechOption, sel: Selection): Availability {
   return { enabled: true, missing: [] };
 }
 
-/** Toggle an option, honouring the step's single/multi mode. */
-export function toggle(sel: Selection, step: Step, optionId: string): Selection {
-  const current = sel[step.id] ?? [];
-  const next: Selection = { ...sel };
+/**
+ * Toggle an option and re-normalise the whole blueprint.
+ *
+ * `touched` is what separates "this step has never been seen" from "the user
+ * deliberately emptied this step": switching branch reveals steps that should
+ * arrive with their defaults, but unticking every box in a step you are looking
+ * at must stay empty.
+ */
+export function applyToggle(bp: Blueprint, step: Step, optionId: string): Blueprint {
+  // Baseline options are not a choice; clicking one is a no-op.
+  if (optionById(optionId)?.locked) return bp;
+
+  const current = bp.selection[step.id] ?? [];
+  const next: Selection = { ...bp.selection };
   if (step.mode === 'single') {
     next[step.id] = current.includes(optionId) ? [] : [optionId];
   } else {
@@ -90,7 +120,32 @@ export function toggle(sel: Selection, step: Step, optionId: string): Selection 
       ? current.filter((id) => id !== optionId)
       : [...current, optionId];
   }
-  return prune(next);
+
+  const touched = bp.touched.includes(step.id) ? bp.touched : [...bp.touched, step.id];
+  return normalize({ ...bp, selection: next, touched });
+}
+
+/** Seed untouched visible steps, drop orphans, force the baseline back in. */
+export function normalize(bp: Blueprint): Blueprint {
+  let selection = prune(bp.selection);
+
+  // Several passes: seeding one step can reveal another.
+  for (let pass = 0; pass < 4; pass++) {
+    const next: Selection = { ...selection };
+    for (const step of visibleSteps(next)) {
+      if (bp.touched.includes(step.id)) continue;
+      // Locked ids are injected automatically, so they do not count as "the
+      // step already has an answer" — otherwise a freshly revealed step with a
+      // baseline option would never receive its recommended extras.
+      const chosen = (next[step.id] ?? []).filter((id) => !optionById(id)?.locked);
+      if (chosen.length) continue;
+      const picks = step.options.filter((o) => o.recommended || o.locked).map((o) => o.id);
+      if (picks.length) next[step.id] = step.mode === 'single' ? picks.slice(0, 1) : picks;
+    }
+    selection = prune(next);
+  }
+
+  return { ...bp, selection };
 }
 
 /**
@@ -112,7 +167,7 @@ function prune(sel: Selection): Selection {
     }
     out = next;
   }
-  return out;
+  return ensureLocked(out);
 }
 
 export function isComplete(bp: Blueprint): boolean {
@@ -124,10 +179,13 @@ export function loadBlueprint(): Blueprint {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyBlueprint();
     const parsed = JSON.parse(raw) as Partial<Blueprint>;
-    return {
+    // normalize() drops ids the catalog no longer knows and re-seeds anything
+    // the stored blueprint predates, so an old draft still opens cleanly.
+    return normalize({
       meta: { ...EMPTY_META, ...(parsed.meta ?? {}) },
       selection: parsed.selection ?? defaultSelection(),
-    };
+      touched: parsed.touched ?? [],
+    });
   } catch {
     return emptyBlueprint();
   }

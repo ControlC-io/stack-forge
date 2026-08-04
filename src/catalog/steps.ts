@@ -1,13 +1,18 @@
 import type { I18nText } from '@/i18n';
 import type { Selection, Step } from './types';
-import { has, hasAny } from './types';
+import { has } from './types';
 
 /**
  * The decision tree.
  *
- * Steps are asked in order; `visibleIf` prunes branches the shape of the project
- * has already ruled out (no database questions for a static site) and `requires`
- * greys out individual options whose prerequisites are missing.
+ * Two ideas keep this usable:
+ *
+ *  - `locked` options are the stack baseline. They are shown so you understand
+ *    what you are getting, not so you can choose — deciding these once is the
+ *    entire point of a template. Only genuine decisions are toggleable.
+ *  - The first step (`stack`) is the high-level branch. Everything below it is
+ *    pruned by `visibleIf`: pick Supabase and the API / database / auth /
+ *    storage steps disappear, because Supabase already answers them.
  *
  * `label`/`description`/`title`/`question` are UI copy and are translated.
  * `spec`/`notes`/`tasks` end up in the generated files and are English only.
@@ -16,8 +21,9 @@ import { has, hasAny } from './types';
 /** Shorthand for a translated string. Product names stay plain strings. */
 const L = (es: string, en: string, fr: string): I18nText => ({ es, en, fr });
 
-const needsBackend = (sel: Selection) => !has(sel, 'shape-frontend-only');
-const needsFrontend = (sel: Selection) => !has(sel, 'shape-api-only');
+const isSupabase = (sel: Selection) => has(sel, 'stack-supabase');
+const hasOwnApi = (sel: Selection) => has(sel, 'stack-fullstack') || has(sel, 'stack-api-only');
+const hasUi = (sel: Selection) => !has(sel, 'stack-api-only');
 
 export const STEPS: Step[] = [
   {
@@ -70,52 +76,65 @@ export const STEPS: Step[] = [
   },
 
   {
-    id: 'shape',
-    title: L('Forma', 'Shape', 'Forme'),
+    id: 'stack',
+    title: L('Backend', 'Backend', 'Backend'),
     question: L(
-      '¿Qué forma tiene el proyecto?',
-      'What shape is the project?',
-      'Quelle est la forme du projet ?',
+      '¿Dónde viven los datos y la lógica?',
+      'Where do the data and the logic live?',
+      'Où vivent les données et la logique ?',
     ),
     help: L(
-      'Es la decisión que más ramas poda del árbol.',
-      'This is the decision that prunes the most branches.',
-      'C’est la décision qui élague le plus de branches.',
+      'Es la decisión más importante: define qué pasos verás después.',
+      'The most important decision: it defines which steps you see next.',
+      'La décision la plus importante : elle définit les étapes suivantes.',
     ),
     mode: 'single',
     options: [
       {
-        id: 'shape-fullstack',
-        label: L('Full-stack DMZ', 'Full-stack DMZ', 'Full-stack DMZ'),
+        id: 'stack-fullstack',
+        label: L('API propia en tu VPS', 'Your own API on your VPS', 'Votre propre API sur votre VPS'),
         description: L(
-          'nginx como único entrypoint, frontend + API + base de datos en redes separadas.',
-          'nginx as the only entrypoint, frontend + API + database on separate networks.',
-          'nginx comme unique point d’entrée, frontend + API + base de données sur des réseaux séparés.',
+          'Express + PostgreSQL + MinIO en Docker, detrás de nginx. Control total, sin coste por uso.',
+          'Express + PostgreSQL + MinIO in Docker, behind nginx. Full control, no usage billing.',
+          'Express + PostgreSQL + MinIO dans Docker, derrière nginx. Contrôle total, sans facturation à l’usage.',
         ),
-        spec: 'Full-stack DMZ layout: nginx is the only entrypoint, frontend and API on separate networks',
+        spec: 'Self-hosted API: Express + PostgreSQL + MinIO in Docker behind nginx',
         recommended: true,
         notes: [
           'Network topology: `dmz_net` (nginx, frontend) and `internal_net` (API, database, storage). Only nginx publishes host ports.',
         ],
       },
       {
-        id: 'shape-frontend-only',
-        label: L('Solo frontend', 'Frontend only', 'Frontend seul'),
+        id: 'stack-supabase',
+        label: 'Supabase',
         description: L(
-          'SPA estática servida por nginx. Sin API propia, sin base de datos.',
-          'Static SPA served by nginx. No API of its own, no database.',
-          'SPA statique servie par nginx. Pas d’API propre, pas de base de données.',
+          'Postgres, Auth y Storage gestionados. El frontend habla directo con Supabase: no se genera API propia.',
+          'Managed Postgres, Auth and Storage. The frontend talks to Supabase directly: no API of your own is generated.',
+          'Postgres, Auth et Storage managés. Le frontend parle directement à Supabase : aucune API propre n’est générée.',
         ),
-        spec: 'Static single-page app, no server of its own',
-        notes: ['No backend: all state lives in the browser (localStorage / IndexedDB).'],
+        spec: 'Supabase as the backend (managed Postgres, Auth and Storage); the frontend talks to it directly',
+        notes: [
+          'There is no server of your own: the browser is the only client, so every security rule must be a Row Level Security policy in the database.',
+        ],
       },
       {
-        id: 'shape-api-only',
-        label: L('Solo API', 'API only', 'API seule'),
+        id: 'stack-static',
+        label: L('Sin backend', 'No backend', 'Sans backend'),
         description: L(
-          'Servicio HTTP sin interfaz. Útil para workers, webhooks o APIs internas.',
-          'Headless HTTP service. For workers, webhooks or internal APIs.',
-          'Service HTTP sans interface. Pour workers, webhooks ou API internes.',
+          'SPA estática. Todo el estado en el navegador (localStorage). Sin datos compartidos entre dispositivos.',
+          'Static SPA. All state in the browser (localStorage). No data shared across devices.',
+          'SPA statique. Tout l’état dans le navigateur (localStorage). Aucune donnée partagée entre appareils.',
+        ),
+        spec: 'Static single-page app, no server and no database',
+        notes: ['No backend: all state lives in the browser, so every feature must survive a hard refresh and a cleared storage.'],
+      },
+      {
+        id: 'stack-api-only',
+        label: L('Solo API, sin interfaz', 'API only, no interface', 'API seule, sans interface'),
+        description: L(
+          'Servicio HTTP para workers, webhooks o integraciones internas.',
+          'HTTP service for workers, webhooks or internal integrations.',
+          'Service HTTP pour workers, webhooks ou intégrations internes.',
         ),
         spec: 'Headless HTTP service, no user interface',
       },
@@ -125,24 +144,25 @@ export const STEPS: Step[] = [
   {
     id: 'frontend',
     title: 'Frontend',
-    question: L(
-      '¿Qué framework de frontend?',
-      'Which frontend framework?',
-      'Quel framework frontend ?',
+    question: L('¿Qué lleva el frontend?', 'What goes into the frontend?', 'Que contient le frontend ?'),
+    help: L(
+      'La base es fija. Marca sólo los extras que vayas a usar de verdad.',
+      'The baseline is fixed. Only tick the extras you will actually use.',
+      'Le socle est fixe. Ne cochez que les extras que vous utiliserez vraiment.',
     ),
-    mode: 'single',
-    visibleIf: needsFrontend,
+    mode: 'multi',
+    visibleIf: hasUi,
     options: [
       {
         id: 'fe-react-vite',
         label: 'React 19 + Vite 5',
         description: L(
-          'SPA con react-router-dom v6. Build estático servido por nginx en producción.',
-          'SPA with react-router-dom v6. Static build served by nginx in production.',
-          'SPA avec react-router-dom v6. Build statique servi par nginx en production.',
+          'SPA con react-router-dom v6, TypeScript strict y alias @/* → src/*.',
+          'SPA with react-router-dom v6, strict TypeScript and the @/* → src/* alias.',
+          'SPA avec react-router-dom v6, TypeScript strict et l’alias @/* → src/*.',
         ),
         spec: 'React 19 + Vite 5 SPA with react-router-dom v6',
-        recommended: true,
+        locked: true,
         deps: {
           frontend: ['react', 'react-dom', 'react-router-dom'],
           frontendDev: ['vite', '@vitejs/plugin-react', 'typescript', '@types/react', '@types/react-dom'],
@@ -154,78 +174,28 @@ export const STEPS: Step[] = [
         ],
       },
       {
-        id: 'fe-nextjs',
-        label: 'Next.js (App Router)',
-        description: L(
-          'SSR/RSC. Sustituye al par nginx+SPA: el propio Next sirve la app.',
-          'SSR/RSC. Replaces the nginx+SPA pair: Next serves the app itself.',
-          'SSR/RSC. Remplace le duo nginx+SPA : Next sert l’application lui-même.',
-        ),
-        spec: 'Next.js App Router (server-rendered, serves itself)',
-        conflicts: ['shape-fullstack'],
-        deps: { frontend: ['next', 'react', 'react-dom'] },
-      },
-    ],
-  },
-
-  {
-    id: 'ui',
-    title: 'UI',
-    question: L(
-      '¿Qué capa de UI y utilidades de cliente?',
-      'Which UI layer and client-side utilities?',
-      'Quelle couche UI et quels utilitaires côté client ?',
-    ),
-    mode: 'multi',
-    visibleIf: needsFrontend,
-    options: [
-      {
         id: 'ui-tailwind4',
-        label: 'Tailwind CSS 4',
+        label: L('Tailwind 4 + shadcn/ui', 'Tailwind 4 + shadcn/ui', 'Tailwind 4 + shadcn/ui'),
         description: L(
-          'Configurado con @theme en src/index.css. Sin tailwind.config.js.',
-          'Configured with @theme in src/index.css. No tailwind.config.js.',
-          'Configuré avec @theme dans src/index.css. Pas de tailwind.config.js.',
+          'Tailwind configurado con @theme en src/index.css, componentes shadcn (New York) e iconos lucide.',
+          'Tailwind configured with @theme in src/index.css, shadcn (New York) components and lucide icons.',
+          'Tailwind configuré avec @theme dans src/index.css, composants shadcn (New York) et icônes lucide.',
         ),
-        spec: 'Tailwind CSS 4, configured via `@theme` in `src/index.css` (no tailwind.config.js)',
-        recommended: true,
-        deps: { frontendDev: ['tailwindcss', '@tailwindcss/vite'] },
+        spec: 'Tailwind CSS 4 (configured via `@theme` in `src/index.css`) with shadcn/ui New York components and lucide-react icons',
+        locked: true,
+        deps: {
+          frontend: ['class-variance-authority', 'clsx', 'tailwind-merge', '@radix-ui/react-slot', 'lucide-react'],
+          frontendDev: ['tailwindcss', '@tailwindcss/vite'],
+        },
         gotchas: ['tailwind4-theme'],
       },
       {
-        id: 'ui-shadcn',
-        label: 'shadcn/ui (New York)',
-        description: L(
-          'Componentes copiados a src/components/ui/, sobre Radix UI.',
-          'Components vendored into src/components/ui/, built on Radix UI.',
-          'Composants copiés dans src/components/ui/, basés sur Radix UI.',
-        ),
-        spec: 'shadcn/ui (New York style) components vendored into `src/components/ui/`',
-        recommended: true,
-        requires: ['ui-tailwind4'],
-        deps: {
-          frontend: ['class-variance-authority', 'clsx', 'tailwind-merge', '@radix-ui/react-slot'],
-        },
-      },
-      {
-        id: 'ui-lucide',
-        label: 'lucide-react',
-        description: L(
-          'Set de iconos que asume shadcn/ui.',
-          'The icon set shadcn/ui assumes.',
-          'Le jeu d’icônes attendu par shadcn/ui.',
-        ),
-        spec: 'lucide-react icons',
-        recommended: true,
-        deps: { frontend: ['lucide-react'] },
-      },
-      {
         id: 'ui-forms',
-        label: 'react-hook-form + zod',
+        label: L('Formularios (react-hook-form + zod)', 'Forms (react-hook-form + zod)', 'Formulaires (react-hook-form + zod)'),
         description: L(
-          'Formularios con validación compartida entre cliente y API.',
-          'Forms with validation shared between client and API.',
-          'Formulaires avec validation partagée entre le client et l’API.',
+          'Para cualquier formulario más allá de un campo suelto. El schema zod se comparte con la API.',
+          'For any form beyond a single field. The zod schema is shared with the API.',
+          'Pour tout formulaire au-delà d’un champ isolé. Le schéma zod est partagé avec l’API.',
         ),
         spec: 'react-hook-form + zod, with the schemas shared between client and API',
         recommended: true,
@@ -233,51 +203,57 @@ export const STEPS: Step[] = [
       },
       {
         id: 'ui-query',
-        label: 'TanStack Query',
+        label: L('Caché de datos (TanStack Query)', 'Data cache (TanStack Query)', 'Cache de données (TanStack Query)'),
         description: L(
-          'Caché de servidor, reintentos y estados de carga sin useEffect a mano.',
-          'Server cache, retries and loading states without hand-rolled useEffect.',
-          'Cache serveur, réessais et états de chargement sans useEffect manuel.',
+          'Si la app lee datos del servidor en varias pantallas: caché, reintentos y estados de carga.',
+          'If the app reads server data on several screens: caching, retries and loading states.',
+          'Si l’app lit des données serveur sur plusieurs écrans : cache, réessais et états de chargement.',
         ),
         spec: 'TanStack Query for server state, caching and retries',
+        recommended: true,
         deps: { frontend: ['@tanstack/react-query'] },
       },
       {
         id: 'ui-sonner',
-        label: 'sonner',
+        label: L('Notificaciones (sonner)', 'Toasts (sonner)', 'Notifications (sonner)'),
         description: L(
-          'Notificaciones. Un único <Toaster /> en el layout raíz.',
-          'Toasts. A single <Toaster /> in the root layout.',
-          'Notifications. Un seul <Toaster /> dans le layout racine.',
+          'Avisos de éxito y error. Un único <Toaster /> en el layout raíz.',
+          'Success and error feedback. A single <Toaster /> in the root layout.',
+          'Retours de succès et d’erreur. Un seul <Toaster /> dans le layout racine.',
         ),
         spec: 'sonner for toasts (a single <Toaster /> in the root layout)',
+        recommended: true,
         deps: { frontend: ['sonner'] },
       },
       {
         id: 'ui-i18n',
-        label: 'i18next',
+        label: L('Multiidioma (i18next)', 'Multi-language (i18next)', 'Multilingue (i18next)'),
         description: L(
-          'Textos de interfaz traducibles. Los identificadores del código siguen en inglés.',
-          'Translatable UI copy. Code identifiers stay in English.',
-          'Textes d’interface traduisibles. Les identifiants du code restent en anglais.',
+          'Sólo si la interfaz va en más de un idioma. Los identificadores del código siguen en inglés.',
+          'Only if the interface ships in more than one language. Code identifiers stay in English.',
+          'Uniquement si l’interface existe en plusieurs langues. Les identifiants du code restent en anglais.',
         ),
         spec: 'i18next for UI copy (identifiers and comments stay in English)',
         deps: { frontend: ['i18next', 'react-i18next'] },
       },
       {
         id: 'ui-charts',
-        label: 'Recharts',
-        description: L('Gráficas para dashboards.', 'Charts for dashboards.', 'Graphiques pour tableaux de bord.'),
+        label: L('Gráficas (Recharts)', 'Charts (Recharts)', 'Graphiques (Recharts)'),
+        description: L(
+          'Sólo si hay dashboard o métricas.',
+          'Only if there is a dashboard or metrics.',
+          'Uniquement s’il y a un tableau de bord ou des métriques.',
+        ),
         spec: 'Recharts for dashboard charts',
         deps: { frontend: ['recharts'] },
       },
       {
         id: 'ui-markdown',
-        label: 'react-markdown + rehype-sanitize',
+        label: L('Render de markdown', 'Markdown rendering', 'Rendu markdown'),
         description: L(
-          'Render de markdown saneado (respuestas de LLM, documentación).',
-          'Sanitized markdown rendering (LLM answers, documentation).',
-          'Rendu markdown assaini (réponses de LLM, documentation).',
+          'Para respuestas de LLM o contenido editorial. Siempre saneado con rehype-sanitize.',
+          'For LLM answers or editorial content. Always sanitized with rehype-sanitize.',
+          'Pour les réponses de LLM ou du contenu éditorial. Toujours assaini via rehype-sanitize.',
         ),
         spec: 'react-markdown with rehype-sanitize (untrusted markdown is always sanitized)',
         deps: { frontend: ['react-markdown', 'remark-gfm', 'rehype-raw', 'rehype-sanitize'] },
@@ -286,22 +262,119 @@ export const STEPS: Step[] = [
   },
 
   {
+    id: 'supabase',
+    title: 'Supabase',
+    question: L('¿Qué usas de Supabase?', 'Which Supabase features do you use?', 'Quelles fonctionnalités Supabase utilisez-vous ?'),
+    help: L(
+      'El cliente y Postgres vienen siempre. Lo demás se activa por proyecto.',
+      'The client and Postgres always come along. The rest is enabled per project.',
+      'Le client et Postgres sont toujours inclus. Le reste s’active par projet.',
+    ),
+    mode: 'multi',
+    visibleIf: isSupabase,
+    options: [
+      {
+        id: 'sb-core',
+        label: L('Postgres + cliente JS', 'Postgres + JS client', 'Postgres + client JS'),
+        description: L(
+          'supabase-js en el frontend, migraciones SQL versionadas en supabase/migrations/.',
+          'supabase-js in the frontend, SQL migrations versioned in supabase/migrations/.',
+          'supabase-js dans le frontend, migrations SQL versionnées dans supabase/migrations/.',
+        ),
+        spec: 'Supabase Postgres accessed from the browser with supabase-js',
+        locked: true,
+        deps: { frontend: ['@supabase/supabase-js'] },
+        env: [
+          { key: 'VITE_SUPABASE_URL', comment: 'public — inlined into the bundle at build time' },
+          { key: 'VITE_SUPABASE_ANON_KEY', comment: 'public by design; RLS is what actually protects the data' },
+        ],
+        gotchas: ['supabase-anon-key'],
+        tasks: [
+          'Create the Supabase project and put the schema in `supabase/migrations/` — never edit tables only through the dashboard, or the repo stops describing production.',
+        ],
+      },
+      {
+        id: 'sb-rls',
+        label: L('Row Level Security', 'Row Level Security', 'Row Level Security'),
+        description: L(
+          'Políticas por fila. Sin esto cualquiera con la anon key lee toda la tabla.',
+          'Per-row policies. Without them, anyone holding the anon key reads the whole table.',
+          'Politiques par ligne. Sans elles, quiconque possède la clé anon lit toute la table.',
+        ),
+        spec: 'Row Level Security policies on every table (the only real access control in this architecture)',
+        recommended: true,
+        gotchas: ['supabase-rls'],
+        tasks: [
+          'Enable RLS on every table and write an explicit policy per operation. A table without a policy is either fully public or fully unreadable — both are bugs.',
+        ],
+      },
+      {
+        id: 'sb-auth',
+        label: L('Supabase Auth', 'Supabase Auth', 'Supabase Auth'),
+        description: L(
+          'Email/contraseña y OAuth. La sesión la gestiona supabase-js en el navegador.',
+          'Email/password and OAuth. supabase-js manages the session in the browser.',
+          'E-mail/mot de passe et OAuth. supabase-js gère la session dans le navigateur.',
+        ),
+        spec: 'Supabase Auth for email/password and OAuth sign-in',
+        recommended: true,
+        tasks: ['Wire Supabase Auth and derive every RLS policy from `auth.uid()`.'],
+      },
+      {
+        id: 'sb-storage',
+        label: L('Supabase Storage', 'Supabase Storage', 'Supabase Storage'),
+        description: L(
+          'Buckets para ficheros, con sus propias políticas de acceso.',
+          'Buckets for files, with their own access policies.',
+          'Buckets pour les fichiers, avec leurs propres politiques d’accès.',
+        ),
+        spec: 'Supabase Storage buckets for file uploads, with bucket policies',
+      },
+      {
+        id: 'sb-vector',
+        label: L('Búsqueda vectorial (RAG)', 'Vector search (RAG)', 'Recherche vectorielle (RAG)'),
+        description: L(
+          'Extensión pgvector activada en el proyecto, para búsqueda por embeddings.',
+          'The pgvector extension enabled on the project, for embedding search.',
+          'L’extension pgvector activée sur le projet, pour la recherche par embeddings.',
+        ),
+        spec: 'pgvector enabled on the Supabase project for embedding search',
+      },
+      {
+        id: 'sb-realtime',
+        label: L('Realtime', 'Realtime', 'Temps réel'),
+        description: L(
+          'Suscripciones a cambios de tabla. Sólo si varias personas ven la misma pantalla a la vez.',
+          'Subscriptions to table changes. Only if several people watch the same screen at once.',
+          'Abonnements aux changements de table. Uniquement si plusieurs personnes voient le même écran.',
+        ),
+        spec: 'Supabase Realtime subscriptions for live table updates',
+      },
+    ],
+  },
+
+  {
     id: 'backend',
-    title: 'Backend',
-    question: L('¿Qué runtime de API?', 'Which API runtime?', 'Quel runtime d’API ?'),
-    mode: 'single',
-    visibleIf: needsBackend,
+    title: 'API',
+    question: L('¿Qué lleva la API?', 'What goes into the API?', 'Que contient l’API ?'),
+    help: L(
+      'Express + TypeScript es fijo. Marca los módulos que necesites.',
+      'Express + TypeScript is fixed. Tick the modules you need.',
+      'Express + TypeScript est fixe. Cochez les modules nécessaires.',
+    ),
+    mode: 'multi',
+    visibleIf: hasOwnApi,
     options: [
       {
         id: 'backend-express',
         label: 'Express 4 + TypeScript',
         description: L(
-          'ts-node-dev en desarrollo, compilado a dist/ en producción.',
-          'ts-node-dev in development, compiled to dist/ in production.',
-          'ts-node-dev en développement, compilé vers dist/ en production.',
+          'Un router por dominio, validación zod en el borde, error handler central. ts-node-dev en dev, dist/ en prod.',
+          'One router per domain, zod validation at the edge, one central error handler. ts-node-dev in dev, dist/ in prod.',
+          'Un routeur par domaine, validation zod en bordure, gestionnaire d’erreurs central. ts-node-dev en dev, dist/ en prod.',
         ),
         spec: 'Express 4 + TypeScript API (ts-node-dev in dev, compiled to dist/ in prod)',
-        recommended: true,
+        locked: true,
         services: ['backend'],
         deps: {
           backend: ['express', 'cors', 'dotenv', 'zod'],
@@ -313,300 +386,6 @@ export const STEPS: Step[] = [
           'Build the API: one router per domain under `src/routes/`, zod validation at the edge, one centralised error handler.',
           'Expose `/api/health/live` (no database access) and `/api/health/ready` (checks dependencies).',
           'Handle SIGTERM: stop accepting connections, drain in-flight work, then exit.',
-        ],
-      },
-      {
-        id: 'backend-fastify',
-        label: 'Fastify',
-        description: L(
-          'Más rápido y con validación de schema integrada. Menos ejemplos en este stack.',
-          'Faster, with schema validation built in. Fewer examples in this stack.',
-          'Plus rapide, validation de schéma intégrée. Moins d’exemples dans ce stack.',
-        ),
-        spec: 'Fastify + TypeScript API with schema-based validation',
-        services: ['backend'],
-        deps: { backend: ['fastify', 'zod'] },
-      },
-    ],
-  },
-
-  {
-    id: 'database',
-    title: L('Datos', 'Data', 'Données'),
-    question: L('¿Base de datos y ORM?', 'Database and ORM?', 'Base de données et ORM ?'),
-    mode: 'single',
-    visibleIf: needsBackend,
-    options: [
-      {
-        id: 'db-postgres-prisma',
-        label: 'PostgreSQL + Prisma',
-        description: L(
-          'Esquema en prisma/schema.prisma, cambios aplicados con db push.',
-          'Schema in prisma/schema.prisma, changes applied with db push.',
-          'Schéma dans prisma/schema.prisma, changements appliqués avec db push.',
-        ),
-        spec: 'PostgreSQL 16 with Prisma (schema changes applied with `prisma db push`)',
-        recommended: true,
-        services: ['postgres'],
-        deps: { backend: ['@prisma/client'], backendDev: ['prisma'] },
-        env: [
-          { key: 'POSTGRES_USER', value: 'postgres' },
-          { key: 'POSTGRES_PASSWORD', secret: true },
-          { key: 'POSTGRES_DB', value: 'app_db' },
-          { key: 'DATABASE_URL', value: 'postgresql://postgres:CHANGEME@postgres:5432/app_db' },
-        ],
-        gotchas: ['prisma-camelcase', 'prisma-text-ids', 'prisma-never-reset'],
-        tasks: [
-          'Write the initial Prisma schema and apply it with `npm run prisma:push` (never `migrate dev` — see the traps below).',
-          'Add an idempotent seed script for roles and baseline configuration.',
-        ],
-      },
-      {
-        id: 'db-postgres-pgvector',
-        label: 'PostgreSQL + pgvector + Prisma',
-        description: L(
-          'Para RAG: imagen pgvector/pgvector:pg16, columnas vector añadidas por SQL crudo.',
-          'For RAG: pgvector/pgvector:pg16 image, vector columns added via raw SQL.',
-          'Pour le RAG : image pgvector/pgvector:pg16, colonnes vector ajoutées en SQL brut.',
-        ),
-        spec: 'PostgreSQL 16 + pgvector with Prisma, for embedding search',
-        services: ['postgres'],
-        deps: { backend: ['@prisma/client'], backendDev: ['prisma'] },
-        env: [
-          { key: 'POSTGRES_USER', value: 'postgres' },
-          { key: 'POSTGRES_PASSWORD', secret: true },
-          { key: 'POSTGRES_DB', value: 'app_db' },
-          { key: 'DATABASE_URL', value: 'postgresql://postgres:CHANGEME@postgres:5432/app_db' },
-        ],
-        gotchas: ['prisma-camelcase', 'prisma-text-ids', 'sql-array-literal', 'prisma-never-reset'],
-        notes: [
-          '`vector(N)` columns cannot be expressed in Prisma, so they are created from raw SQL in the seed, together with the search functions.',
-        ],
-      },
-      {
-        id: 'db-sqlite-prisma',
-        label: 'SQLite + Prisma',
-        description: L(
-          'Un fichero en un volumen. Suficiente para herramientas internas.',
-          'One file on a volume. Enough for internal tools.',
-          'Un fichier sur un volume. Suffisant pour un outil interne.',
-        ),
-        spec: 'SQLite via Prisma, stored on a mounted volume',
-        deps: { backend: ['@prisma/client'], backendDev: ['prisma'] },
-        env: [{ key: 'DATABASE_URL', value: 'file:./data/app.db' }],
-        gotchas: ['prisma-camelcase', 'prisma-never-reset'],
-      },
-      {
-        id: 'db-none',
-        label: L('Sin base de datos', 'No database', 'Sans base de données'),
-        description: L(
-          'La API es sin estado o delega la persistencia en otro servicio.',
-          'The API is stateless, or delegates persistence to another service.',
-          'L’API est sans état ou délègue la persistance à un autre service.',
-        ),
-        spec: 'No database — the API is stateless',
-      },
-    ],
-  },
-
-  {
-    id: 'auth',
-    title: 'Auth',
-    question: L('¿Cómo se autentica?', 'How do users authenticate?', 'Comment s’authentifie-t-on ?'),
-    mode: 'single',
-    visibleIf: (sel) => needsBackend(sel) && !has(sel, 'db-none'),
-    options: [
-      {
-        id: 'auth-better-auth-jwt',
-        label: L('Better Auth + JWT propio', 'Better Auth + app JWT', 'Better Auth + JWT applicatif'),
-        description: L(
-          'Sesión por cookie para el login y un JWT emitido desde la sesión para las llamadas a la API.',
-          'Cookie session for login, plus a JWT minted from that session for API calls.',
-          'Session par cookie pour la connexion, plus un JWT émis depuis la session pour les appels API.',
-        ),
-        spec: 'Better Auth (email/password session cookie) plus an app-issued JWT for API calls',
-        recommended: true,
-        deps: { backend: ['better-auth', 'jsonwebtoken'], frontend: ['better-auth'] },
-        env: [
-          { key: 'BETTER_AUTH_SECRET', secret: true },
-          { key: 'BETTER_AUTH_URL', value: 'http://127.0.0.1' },
-          { key: 'TRUSTED_ORIGINS', value: 'http://localhost,http://127.0.0.1' },
-          { key: 'JWT_SECRET', secret: true },
-          { key: 'JWT_EXPIRES_IN', value: '8h' },
-        ],
-        gotchas: ['better-auth-scrypt'],
-        tasks: [
-          'Wire Better Auth email/password; after sign-in, `GET /api/auth/jwt-from-session` mints the JWT the frontend uses.',
-          'Add the auth middleware that verifies the JWT on every API route.',
-        ],
-      },
-      {
-        id: 'auth-better-auth',
-        label: L('Better Auth (solo sesión)', 'Better Auth (session only)', 'Better Auth (session seule)'),
-        description: L(
-          'Cookies de sesión sin JWT. Más simple si no hay clientes externos.',
-          'Session cookies without a JWT. Simpler when there are no external clients.',
-          'Cookies de session sans JWT. Plus simple sans clients externes.',
-        ),
-        spec: 'Better Auth with session cookies only',
-        deps: { backend: ['better-auth'], frontend: ['better-auth'] },
-        env: [
-          { key: 'BETTER_AUTH_SECRET', secret: true },
-          { key: 'BETTER_AUTH_URL', value: 'http://127.0.0.1' },
-        ],
-        gotchas: ['better-auth-scrypt'],
-      },
-      {
-        id: 'auth-none',
-        label: L('Sin autenticación', 'No authentication', 'Sans authentification'),
-        description: L(
-          'Herramienta interna detrás de una red privada o de un proxy que ya autentica.',
-          'Internal tool behind a private network or an already-authenticating proxy.',
-          'Outil interne derrière un réseau privé ou un proxy qui authentifie déjà.',
-        ),
-        spec: 'No authentication — access is restricted at the network layer',
-      },
-    ],
-  },
-
-  {
-    id: 'roles',
-    title: L('Roles', 'Roles', 'Rôles'),
-    question: L(
-      '¿Necesitas control de acceso por rol?',
-      'Do you need role-based access control?',
-      'Avez-vous besoin d’un contrôle d’accès par rôle ?',
-    ),
-    mode: 'single',
-    visibleIf: (sel) => hasAny(sel, ['auth-better-auth-jwt', 'auth-better-auth']),
-    options: [
-      {
-        id: 'rbac-simple',
-        label: L('RBAC de tabla propia', 'Table-backed RBAC', 'RBAC en table dédiée'),
-        description: L(
-          'Tabla de perfiles (admin | contributor | reviewer), middleware guard en todas las rutas.',
-          'Profile table (admin | contributor | reviewer) plus a guard middleware on every route.',
-          'Table de profils (admin | contributor | reviewer) et un middleware de garde sur chaque route.',
-        ),
-        spec: 'Role-based access control: a profile table (admin | contributor | reviewer) and a guard middleware',
-        recommended: true,
-        tasks: [
-          "Add the role guard and apply it to EVERY business route; auto-provision the lowest role on a user's first request.",
-        ],
-      },
-      {
-        id: 'rbac-none',
-        label: L('Solo usuario autenticado', 'Authenticated users only', 'Utilisateurs authentifiés seulement'),
-        description: L(
-          'Todos los usuarios ven lo mismo.',
-          'Every user sees the same thing.',
-          'Tous les utilisateurs voient la même chose.',
-        ),
-        spec: 'Authenticated users all have the same permissions',
-      },
-    ],
-  },
-
-  {
-    id: 'storage',
-    title: 'Storage',
-    question: L('¿Almacenamiento de ficheros?', 'File storage?', 'Stockage de fichiers ?'),
-    mode: 'single',
-    visibleIf: needsBackend,
-    options: [
-      {
-        id: 'storage-minio',
-        label: L('MinIO (S3 self-hosted)', 'MinIO (self-hosted S3)', 'MinIO (S3 auto-hébergé)'),
-        description: L(
-          'Compatible con S3, en el mismo VPS. Subidas proxeadas por la API.',
-          'S3-compatible, on the same VPS. Uploads proxied through the API.',
-          'Compatible S3, sur le même VPS. Téléversements relayés par l’API.',
-        ),
-        spec: 'MinIO for object storage (S3-compatible, self-hosted alongside the app)',
-        recommended: true,
-        services: ['minio'],
-        deps: {
-          backend: ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner', 'multer'],
-          backendDev: ['@types/multer'],
-        },
-        env: [
-          { key: 'MINIO_ROOT_USER', value: 'minioadmin' },
-          { key: 'MINIO_ROOT_PASSWORD', secret: true },
-          { key: 'MINIO_ENDPOINT', value: 'http://minio:9000', comment: 'internal network — server-side operations' },
-          { key: 'MINIO_PUBLIC_URL', value: 'http://127.0.0.1:9000', comment: 'browser-facing host — used to sign URLs' },
-          { key: 'MINIO_BUCKET', value: 'app-files' },
-        ],
-        gotchas: ['minio-two-clients', 'upload-proxy'],
-      },
-      {
-        id: 'storage-s3',
-        label: L('S3 / R2 gestionado', 'Managed S3 / R2', 'S3 / R2 managé'),
-        description: L(
-          'Bucket externo. Sin contenedor extra, con coste por uso.',
-          'External bucket. No extra container, pay per use.',
-          'Bucket externe. Pas de conteneur en plus, facturé à l’usage.',
-        ),
-        spec: 'Managed S3-compatible bucket (AWS S3 or Cloudflare R2)',
-        deps: { backend: ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'] },
-        env: [
-          { key: 'S3_ENDPOINT' },
-          { key: 'S3_ACCESS_KEY_ID', secret: true },
-          { key: 'S3_SECRET_ACCESS_KEY', secret: true },
-          { key: 'S3_BUCKET' },
-        ],
-        gotchas: ['upload-proxy'],
-      },
-      {
-        id: 'storage-none',
-        label: L('Sin ficheros', 'No file storage', 'Sans stockage de fichiers'),
-        description: L(
-          'La app no sube ni sirve binarios.',
-          'The app neither uploads nor serves binaries.',
-          'L’application ne téléverse ni ne sert de binaires.',
-        ),
-        spec: 'No file storage',
-      },
-    ],
-  },
-
-  {
-    id: 'features',
-    title: L('Módulos', 'Modules', 'Modules'),
-    question: L(
-      '¿Qué módulos transversales incluye?',
-      'Which cross-cutting modules does it need?',
-      'Quels modules transversaux inclure ?',
-    ),
-    mode: 'multi',
-    visibleIf: needsBackend,
-    options: [
-      {
-        id: 'feat-uploads',
-        label: L('Subida de ficheros', 'File uploads', 'Téléversement de fichiers'),
-        description: L(
-          'multer en memoria, límite idéntico en nginx y en la API.',
-          'multer in memory, with identical limits in nginx and the API.',
-          'multer en mémoire, avec des limites identiques dans nginx et l’API.',
-        ),
-        spec: 'File uploads proxied through the API (multer memoryStorage)',
-        requires: ['storage-minio'],
-        gotchas: ['upload-proxy'],
-      },
-      {
-        id: 'feat-email',
-        label: L('Servicio de email aparte', 'Separate email service', 'Service e-mail séparé'),
-        description: L(
-          'Microservicio propio (SendGrid) con secreto compartido; la API nunca habla con el proveedor.',
-          'Its own microservice (SendGrid) behind a shared secret; the API never talks to the provider.',
-          'Microservice dédié (SendGrid) avec un secret partagé ; l’API ne parle jamais au fournisseur.',
-        ),
-        spec: 'Transactional email in its own service (SendGrid), reached with a shared secret',
-        services: ['email_service'],
-        env: [
-          { key: 'SENDGRID_API_KEY', secret: true },
-          { key: 'SENDGRID_FROM_EMAIL' },
-          { key: 'EMAIL_SERVICE_SECRET', secret: true },
-          { key: 'EMAIL_SERVICE_URL', value: 'http://email_service:3001' },
         ],
       },
       {
@@ -628,35 +407,29 @@ export const STEPS: Step[] = [
         ],
       },
       {
-        id: 'feat-swagger',
-        label: 'Swagger / OpenAPI',
+        id: 'feat-email',
+        label: L('Emails transaccionales', 'Transactional email', 'E-mails transactionnels'),
         description: L(
-          'Docs generadas desde comentarios JSDoc en /api/docs.',
-          'Docs generated from JSDoc comments, served at /api/docs.',
-          'Docs générées depuis les commentaires JSDoc, servies sur /api/docs.',
+          'Microservicio aparte (SendGrid) con secreto compartido; la API nunca habla con el proveedor.',
+          'A separate microservice (SendGrid) behind a shared secret; the API never talks to the provider.',
+          'Un microservice séparé (SendGrid) avec un secret partagé ; l’API ne parle jamais au fournisseur.',
         ),
-        spec: 'OpenAPI docs generated from JSDoc comments, served at /api/docs',
-        deps: { backend: ['swagger-jsdoc', 'swagger-ui-express'] },
-        gotchas: ['swagger-enomem'],
-      },
-      {
-        id: 'feat-public-api',
-        label: L('API pública con Bearer', 'Public API with bearer token', 'API publique avec jeton Bearer'),
-        description: L(
-          'Superficie separada para integraciones máquina-a-máquina, con su propio token.',
-          'A separate surface for machine-to-machine integrations, with its own token.',
-          'Une surface distincte pour les intégrations machine-à-machine, avec son propre jeton.',
-        ),
-        spec: 'A separate public REST surface authenticated with a static bearer token',
-        env: [{ key: 'API_BEARER_TOKEN', secret: true }],
+        spec: 'Transactional email in its own service (SendGrid), reached with a shared secret',
+        services: ['email_service'],
+        env: [
+          { key: 'SENDGRID_API_KEY', secret: true },
+          { key: 'SENDGRID_FROM_EMAIL' },
+          { key: 'EMAIL_SERVICE_SECRET', secret: true },
+          { key: 'EMAIL_SERVICE_URL', value: 'http://email_service:3001' },
+        ],
       },
       {
         id: 'feat-jobs',
         label: L('Trabajos en segundo plano', 'Background jobs', 'Tâches de fond'),
         description: L(
-          'Cola en proceso con límite de concurrencia explícito (proteger la memoria del contenedor).',
-          'In-process queue with an explicit concurrency cap (protects container memory).',
-          'File d’attente en processus avec une limite de concurrence explicite (protège la mémoire du conteneur).',
+          'Cola en proceso con límite de concurrencia explícito, para trabajo largo (parseo, embeddings).',
+          'In-process queue with an explicit concurrency cap, for long work (parsing, embeddings).',
+          'File en processus avec limite de concurrence explicite, pour les traitements longs (parsing, embeddings).',
         ),
         spec: 'In-process background jobs with an explicit concurrency cap',
         env: [{ key: 'MAX_CONCURRENT_JOBS', value: '2' }],
@@ -664,41 +437,350 @@ export const STEPS: Step[] = [
           'The concurrency cap exists to protect container memory: raising it is the fastest route back to OOM kills.',
         ],
       },
+      {
+        id: 'feat-swagger',
+        label: L('Documentación OpenAPI', 'OpenAPI docs', 'Documentation OpenAPI'),
+        description: L(
+          'Generada desde comentarios JSDoc, servida en /api/docs.',
+          'Generated from JSDoc comments, served at /api/docs.',
+          'Générée depuis les commentaires JSDoc, servie sur /api/docs.',
+        ),
+        spec: 'OpenAPI docs generated from JSDoc comments, served at /api/docs',
+        deps: { backend: ['swagger-jsdoc', 'swagger-ui-express'] },
+        gotchas: ['swagger-enomem'],
+      },
+      {
+        id: 'feat-public-api',
+        label: L('API pública con token', 'Public API with a token', 'API publique avec jeton'),
+        description: L(
+          'Superficie separada para integraciones máquina-a-máquina, con su propio Bearer estático.',
+          'A separate surface for machine-to-machine integrations, with its own static bearer token.',
+          'Une surface distincte pour les intégrations machine-à-machine, avec son propre jeton statique.',
+        ),
+        spec: 'A separate public REST surface authenticated with a static bearer token',
+        env: [{ key: 'API_BEARER_TOKEN', secret: true }],
+      },
+    ],
+  },
+
+  {
+    id: 'ai-provider',
+    title: 'IA',
+    question: L('¿Cómo llamas a los modelos?', 'How do you call the models?', 'Comment appelez-vous les modèles ?'),
+    help: L(
+      'Sea cual sea la opción, la clave vive sólo en el backend y el modelo es configurable, no está en el código.',
+      'Whichever you pick, the key lives only in the backend and the model is configuration, not code.',
+      'Quel que soit le choix, la clé ne vit que côté backend et le modèle est une configuration, pas du code.',
+    ),
+    mode: 'single',
+    visibleIf: (sel) => has(sel, 'feat-ai'),
+    options: [
+      {
+        id: 'ai-openrouter',
+        label: L('OpenRouter (una sola clave)', 'OpenRouter (one key)', 'OpenRouter (une seule clé)'),
+        description: L(
+          'Una clave y una API para todos los modelos: cambias de proveedor tocando un string. Ideal para empezar y para comparar precios.',
+          'One key and one API for every model: switching provider is a string change. Best for starting out and comparing prices.',
+          'Une clé et une API pour tous les modèles : changer de fournisseur revient à changer une chaîne. Idéal pour démarrer.',
+        ),
+        spec: 'OpenRouter as a single gateway to every model (one API key, model selected by id)',
+        recommended: true,
+        deps: { backend: ['openai'] },
+        env: [
+          { key: 'OPENROUTER_API_KEY', secret: true },
+          { key: 'LLM_MODEL', value: 'openai/gpt-4o-mini' },
+        ],
+        notes: [
+          'OpenRouter speaks the OpenAI protocol, so the official `openai` SDK works by pointing `baseURL` at it. Model ids are `vendor/model`.',
+        ],
+        tasks: [
+          'Route every model call through one provider module so the model id, the timeout and the retry policy live in a single place.',
+        ],
+      },
+      {
+        id: 'ai-direct',
+        label: L('SDKs directos del proveedor', 'Direct provider SDKs', 'SDK directs du fournisseur'),
+        description: L(
+          'Anthropic y/u OpenAI con su SDK oficial: acceso a features propias (caché de prompt, tool use avanzado) y una clave por proveedor.',
+          'Anthropic and/or OpenAI with their official SDK: access to provider-specific features (prompt caching, advanced tool use) and one key per provider.',
+          'Anthropic et/ou OpenAI avec leur SDK officiel : accès aux fonctionnalités propres (cache de prompt, tool use avancé) et une clé par fournisseur.',
+        ),
+        spec: 'Direct provider SDKs (@anthropic-ai/sdk, openai) behind one internal provider interface',
+        deps: { backend: ['@anthropic-ai/sdk', 'openai'] },
+        env: [
+          { key: 'ANTHROPIC_API_KEY', secret: true },
+          { key: 'OPENAI_API_KEY', secret: true },
+          { key: 'LLM_MODEL', value: 'claude-sonnet-5' },
+        ],
+        notes: [
+          'Keep the provider behind one internal interface even with a single vendor: the abstraction resolves DB override → env var → driver default, which is what makes swapping models a config change.',
+        ],
+      },
+      {
+        id: 'ai-local',
+        label: L('Modelo local (Ollama)', 'Local model (Ollama)', 'Modèle local (Ollama)'),
+        description: L(
+          'Sin coste por token y sin datos fuera, pero necesita mucha RAM/GPU en el VPS. Compruébalo antes de elegirlo.',
+          'No per-token cost and no data leaving the box, but it needs serious RAM/GPU on the VPS. Check that first.',
+          'Aucun coût par token et aucune donnée qui sort, mais il faut beaucoup de RAM/GPU sur le VPS. À vérifier d’abord.',
+        ),
+        spec: 'Self-hosted models through Ollama on the same host',
+        env: [
+          { key: 'OLLAMA_URL', value: 'http://ollama:11434' },
+          { key: 'LLM_MODEL', value: 'llama3.1' },
+        ],
+        notes: [
+          'Ollama needs its own memory budget on the host; size it against the same cgroup limits as every other service or it will OOM its neighbours.',
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'ai-capabilities',
+    title: L('Capacidades IA', 'AI capabilities', 'Capacités IA'),
+    question: L('¿Para qué la usas?', 'What do you use it for?', 'Pour quoi l’utilisez-vous ?'),
+    mode: 'multi',
+    visibleIf: (sel) => has(sel, 'feat-ai'),
+    options: [
+      {
+        id: 'ai-chat',
+        label: L('Chat / generación de texto', 'Chat / text generation', 'Chat / génération de texte'),
+        description: L(
+          'Respuestas en streaming. Ojo con el timeout de nginx: 60s por defecto mata la petición.',
+          'Streamed answers. Mind the nginx timeout: the 60s default kills the request.',
+          'Réponses en streaming. Attention au timeout nginx : les 60s par défaut tuent la requête.',
+        ),
+        spec: 'Streaming chat / text generation endpoints',
+        recommended: true,
+        gotchas: ['ai-timeouts'],
+      },
+      {
+        id: 'ai-embeddings',
+        label: L('Embeddings (búsqueda semántica)', 'Embeddings (semantic search)', 'Embeddings (recherche sémantique)'),
+        description: L(
+          'Requiere una base vectorial: marca la búsqueda vectorial en el paso de datos.',
+          'Needs a vector store: tick vector search in the data step.',
+          'Nécessite un stockage vectoriel : cochez la recherche vectorielle à l’étape données.',
+        ),
+        spec: 'Embedding generation for semantic search',
+        env: [{ key: 'EMBEDDING_MODEL', value: 'openai/text-embedding-3-small' }],
+        notes: [
+          'Store the embedding model id next to every vector: re-indexing with a different model silently degrades search until everything is regenerated.',
+        ],
+      },
+      {
+        id: 'ai-parsing',
+        label: L('Parseo / OCR de documentos', 'Document parsing / OCR', 'Parsing / OCR de documents'),
+        description: L(
+          'PDFs y escaneados a texto. Es lo que más memoria consume del contenedor.',
+          'PDFs and scans into text. This is the biggest consumer of container memory.',
+          'PDF et scans convertis en texte. C’est ce qui consomme le plus de mémoire du conteneur.',
+        ),
+        spec: 'Document parsing / OCR pipeline',
+        env: [{ key: 'DATALAB_API_KEY', secret: true }],
+        notes: [
+          'Parsing holds the whole document in memory and base64 re-encoding adds ~33% on top. Cap how many documents may be parsed at once and keep the V8 heap below the container limit.',
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'database',
+    title: L('Datos', 'Data', 'Données'),
+    question: L('¿Cómo guarda los datos?', 'How does it store data?', 'Comment stocke-t-il les données ?'),
+    help: L(
+      'PostgreSQL + Prisma es la base del stack. Añade la extensión vectorial sólo si vas a hacer RAG.',
+      'PostgreSQL + Prisma is the stack baseline. Add the vector extension only if you are doing RAG.',
+      'PostgreSQL + Prisma est le socle du stack. N’ajoutez l’extension vectorielle que pour du RAG.',
+    ),
+    mode: 'multi',
+    visibleIf: hasOwnApi,
+    options: [
+      {
+        id: 'db-postgres-prisma',
+        label: 'PostgreSQL 16 + Prisma',
+        description: L(
+          'Esquema en prisma/schema.prisma, cambios aplicados con db push. Nunca migrate reset.',
+          'Schema in prisma/schema.prisma, changes applied with db push. Never migrate reset.',
+          'Schéma dans prisma/schema.prisma, changements appliqués avec db push. Jamais migrate reset.',
+        ),
+        spec: 'PostgreSQL 16 with Prisma (schema changes applied with `prisma db push`)',
+        locked: true,
+        services: ['postgres'],
+        deps: { backend: ['@prisma/client'], backendDev: ['prisma'] },
+        env: [
+          { key: 'POSTGRES_USER', value: 'postgres' },
+          { key: 'POSTGRES_PASSWORD', secret: true },
+          { key: 'POSTGRES_DB', value: 'app_db' },
+          { key: 'DATABASE_URL', value: 'postgresql://postgres:CHANGEME@postgres:5432/app_db' },
+        ],
+        gotchas: ['prisma-camelcase', 'prisma-text-ids', 'prisma-never-reset'],
+        tasks: [
+          'Write the initial Prisma schema and apply it with `npm run prisma:push` (never `migrate dev` — see the traps below).',
+          'Add an idempotent seed script for roles and baseline configuration.',
+        ],
+      },
+      {
+        id: 'db-pgvector',
+        label: L('Búsqueda vectorial (RAG)', 'Vector search (RAG)', 'Recherche vectorielle (RAG)'),
+        description: L(
+          'Cambia la imagen a pgvector/pgvector:pg16 y añade columnas vector + funciones de búsqueda por SQL crudo.',
+          'Switches the image to pgvector/pgvector:pg16 and adds vector columns + search functions via raw SQL.',
+          'Bascule l’image sur pgvector/pgvector:pg16 et ajoute colonnes vector + fonctions de recherche en SQL brut.',
+        ),
+        spec: 'pgvector on top of PostgreSQL for embedding search',
+        gotchas: ['sql-array-literal'],
+        notes: [
+          '`vector(N)` columns cannot be expressed in Prisma, so they are created from raw SQL in the seed, together with the search functions.',
+        ],
+        tasks: [
+          'Create the vector columns and the similarity-search SQL functions from the seed script, not from a Prisma migration.',
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'auth',
+    title: L('Acceso', 'Access', 'Accès'),
+    question: L('¿Quién puede entrar?', 'Who can get in?', 'Qui peut entrer ?'),
+    help: L(
+      'Déjalo todo sin marcar si es una herramienta interna sin login.',
+      'Leave everything unticked for an internal tool with no login.',
+      'Ne cochez rien pour un outil interne sans connexion.',
+    ),
+    mode: 'multi',
+    visibleIf: hasOwnApi,
+    options: [
+      {
+        id: 'auth-better-auth-jwt',
+        label: L('Login con email y contraseña', 'Email and password login', 'Connexion par e-mail et mot de passe'),
+        description: L(
+          'Better Auth crea la sesión por cookie; la app emite desde ella un JWT para las llamadas a la API.',
+          'Better Auth creates the cookie session; the app mints a JWT from it for API calls.',
+          'Better Auth crée la session par cookie ; l’app en dérive un JWT pour les appels API.',
+        ),
+        spec: 'Better Auth (email/password session cookie) plus an app-issued JWT for API calls',
+        recommended: true,
+        deps: { backend: ['better-auth', 'jsonwebtoken'], frontend: ['better-auth'] },
+        env: [
+          { key: 'BETTER_AUTH_SECRET', secret: true },
+          { key: 'BETTER_AUTH_URL', value: 'http://127.0.0.1' },
+          { key: 'TRUSTED_ORIGINS', value: 'http://localhost,http://127.0.0.1' },
+          { key: 'JWT_SECRET', secret: true },
+          { key: 'JWT_EXPIRES_IN', value: '8h' },
+        ],
+        gotchas: ['better-auth-scrypt'],
+        tasks: [
+          'Wire Better Auth email/password; after sign-in, `GET /api/auth/jwt-from-session` mints the JWT the frontend uses.',
+          'Add the auth middleware that verifies the JWT on every API route.',
+        ],
+      },
+      {
+        id: 'rbac-simple',
+        label: L('Roles y permisos', 'Roles and permissions', 'Rôles et permissions'),
+        description: L(
+          'Tabla de perfiles (admin | contributor | reviewer) y un guard en todas las rutas. Sin esto, todos ven lo mismo.',
+          'A profile table (admin | contributor | reviewer) and a guard on every route. Without it, everyone sees the same.',
+          'Une table de profils (admin | contributor | reviewer) et un garde sur chaque route. Sans cela, tous voient la même chose.',
+        ),
+        spec: 'Role-based access control: a profile table (admin | contributor | reviewer) and a guard middleware',
+        recommended: true,
+        requires: ['auth-better-auth-jwt'],
+        tasks: [
+          "Add the role guard and apply it to EVERY business route; auto-provision the lowest role on a user's first request.",
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'storage',
+    title: L('Ficheros', 'Files', 'Fichiers'),
+    question: L('¿La app maneja ficheros?', 'Does the app handle files?', 'L’app gère-t-elle des fichiers ?'),
+    help: L(
+      'Déjalo sin marcar si sólo maneja datos.',
+      'Leave it unticked if it only handles data.',
+      'Ne cochez rien si elle ne gère que des données.',
+    ),
+    mode: 'multi',
+    visibleIf: hasOwnApi,
+    options: [
+      {
+        id: 'storage-minio',
+        label: L('Almacenamiento de objetos (MinIO)', 'Object storage (MinIO)', 'Stockage d’objets (MinIO)'),
+        description: L(
+          'S3 autohospedado en el mismo VPS. Un contenedor más, sin coste por uso.',
+          'Self-hosted S3 on the same VPS. One more container, no usage billing.',
+          'S3 auto-hébergé sur le même VPS. Un conteneur de plus, sans facturation à l’usage.',
+        ),
+        spec: 'MinIO for object storage (S3-compatible, self-hosted alongside the app)',
+        recommended: true,
+        services: ['minio'],
+        deps: {
+          backend: ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+        },
+        env: [
+          { key: 'MINIO_ROOT_USER', value: 'minioadmin' },
+          { key: 'MINIO_ROOT_PASSWORD', secret: true },
+          { key: 'MINIO_ENDPOINT', value: 'http://minio:9000', comment: 'internal network — server-side operations' },
+          { key: 'MINIO_PUBLIC_URL', value: 'http://127.0.0.1:9000', comment: 'browser-facing host — used to sign URLs' },
+          { key: 'MINIO_BUCKET', value: 'app-files' },
+        ],
+        gotchas: ['minio-two-clients'],
+      },
+      {
+        id: 'feat-uploads',
+        label: L('Subida desde el navegador', 'Browser uploads', 'Téléversement depuis le navigateur'),
+        description: L(
+          'Endpoint multipart proxeado por la API (multer en memoria), con el mismo límite en nginx.',
+          'A multipart endpoint proxied through the API (multer in memory), with a matching nginx limit.',
+          'Un endpoint multipart relayé par l’API (multer en mémoire), avec la même limite dans nginx.',
+        ),
+        spec: 'File uploads proxied through the API (multer memoryStorage)',
+        recommended: true,
+        requires: ['storage-minio'],
+        deps: { backend: ['multer'], backendDev: ['@types/multer'] },
+        gotchas: ['upload-proxy'],
+      },
     ],
   },
 
   {
     id: 'infra',
-    title: 'Infra',
-    question: L(
-      '¿Qué infraestructura genero?',
-      'Which infrastructure should I generate?',
-      'Quelle infrastructure dois-je générer ?',
+    title: L('Despliegue', 'Deployment', 'Déploiement'),
+    question: L('¿Cómo se ejecuta y se despliega?', 'How does it run and deploy?', 'Comment s’exécute et se déploie-t-il ?'),
+    help: L(
+      'Docker en local y Coolify en producción son fijos: es el entorno donde ya sabemos que funciona.',
+      'Docker locally and Coolify in production are fixed: it is the environment we already know works.',
+      'Docker en local et Coolify en production sont fixes : c’est l’environnement que nous maîtrisons.',
     ),
     mode: 'multi',
     options: [
       {
         id: 'infra-compose-dev',
-        label: L('docker-compose de desarrollo', 'Development docker-compose', 'docker-compose de développement'),
+        label: L('Docker Compose en local', 'Docker Compose locally', 'Docker Compose en local'),
         description: L(
-          'Servicios con bind mounts y hot reload, puertos publicados en el host.',
-          'Services with bind mounts and hot reload, ports published on the host.',
-          'Services avec bind mounts et rechargement à chaud, ports publiés sur l’hôte.',
+          'Todo el stack con bind mounts y recarga en caliente, arrancable con un solo comando.',
+          'The whole stack with bind mounts and hot reload, started with one command.',
+          'Tout le stack avec bind mounts et rechargement à chaud, démarré en une commande.',
         ),
         spec: 'Local docker compose stack with bind mounts and hot reload',
-        recommended: true,
+        locked: true,
         gotchas: ['compose-project-name', 'windows-127001'],
       },
       {
         id: 'infra-nginx',
-        label: L('nginx como gateway', 'nginx as the gateway', 'nginx comme passerelle'),
+        label: L('nginx como única puerta', 'nginx as the single door', 'nginx comme porte unique'),
         description: L(
-          'Único entrypoint: sirve el frontend y proxea /api/* al backend.',
-          'The only entrypoint: serves the frontend and proxies /api/* to the backend.',
-          'Unique point d’entrée : sert le frontend et relaie /api/* vers le backend.',
+          'Sirve el frontend y proxea /api/*. Es el único servicio con puertos publicados.',
+          'Serves the frontend and proxies /api/*. The only service with published ports.',
+          'Sert le frontend et relaie /api/*. Le seul service avec des ports publiés.',
         ),
-        spec: 'nginx as the single entrypoint (serves the frontend, proxies /api/*)',
-        recommended: true,
+        spec: 'nginx as the single published entrypoint (serves the static bundle, and proxies /api/* when there is an API)',
+        locked: true,
         services: ['nginx'],
         gotchas: ['nginx-single-entry'],
       },
@@ -706,12 +788,12 @@ export const STEPS: Step[] = [
         id: 'infra-coolify',
         label: L('Producción en Coolify', 'Production on Coolify', 'Production sur Coolify'),
         description: L(
-          'docker-compose.coolify.yml + Dockerfile.prod multi-stage, con las lecciones de las caídas ya aplicadas.',
-          'docker-compose.coolify.yml + multi-stage Dockerfile.prod, with the outage lessons already applied.',
-          'docker-compose.coolify.yml + Dockerfile.prod multi-étapes, avec les leçons des pannes déjà appliquées.',
+          'Compose e imágenes de producción con los límites de memoria, healthchecks y rotación de logs ya puestos.',
+          'Production compose and images with memory limits, healthchecks and log rotation already in place.',
+          'Compose et images de production avec limites mémoire, healthchecks et rotation des logs déjà en place.',
         ),
         spec: 'Production deployment on Coolify (multi-stage images, compose file with no custom networks)',
-        recommended: true,
+        locked: true,
         gotchas: [
           'coolify-no-networks',
           'coolify-memory',
@@ -727,11 +809,12 @@ export const STEPS: Step[] = [
         id: 'infra-ci',
         label: 'GitHub Actions',
         description: L(
-          'Typecheck y build en cada push.',
-          'Typecheck and build on every push.',
-          'Typecheck et build à chaque push.',
+          'Typecheck y build en cada push. Recomendable en cuanto haya más de una persona.',
+          'Typecheck and build on every push. Worth it as soon as more than one person commits.',
+          'Typecheck et build à chaque push. Utile dès que plusieurs personnes commitent.',
         ),
         spec: 'GitHub Actions running typecheck and build on every push',
+        recommended: true,
       },
     ],
   },
@@ -740,9 +823,14 @@ export const STEPS: Step[] = [
     id: 'quality',
     title: L('Calidad', 'Quality', 'Qualité'),
     question: L(
-      '¿Qué disciplina de código impongo en las instrucciones?',
-      'Which coding discipline should the instructions enforce?',
-      'Quelle discipline de code les instructions doivent-elles imposer ?',
+      '¿Qué disciplina impongo en las instrucciones?',
+      'Which discipline should the instructions enforce?',
+      'Quelle discipline les instructions doivent-elles imposer ?',
+    ),
+    help: L(
+      'Va todo al CLAUDE.md del proyecto nuevo, así que el agente lo respeta desde el primer commit.',
+      'This all lands in the new project\'s CLAUDE.md, so the agent honours it from the first commit.',
+      'Tout cela atterrit dans le CLAUDE.md du nouveau projet, respecté dès le premier commit.',
     ),
     mode: 'multi',
     options: [
@@ -755,15 +843,26 @@ export const STEPS: Step[] = [
           'Pas de any implicite, pas de @ts-ignore non justifié.',
         ),
         spec: 'Strict TypeScript everywhere',
-        recommended: true,
+        locked: true,
+      },
+      {
+        id: 'q-english-code',
+        label: L('Código en inglés', 'Code in English', 'Code en anglais'),
+        description: L(
+          'Identificadores, comentarios y commits en inglés; la interfaz puede ir en otro idioma.',
+          'Identifiers, comments and commits in English; the UI may be localised.',
+          'Identifiants, commentaires et commits en anglais ; l’interface peut être localisée.',
+        ),
+        spec: 'Code, comments and commits in English; UI strings may be localised',
+        locked: true,
       },
       {
         id: 'q-vitest',
         label: 'Vitest',
         description: L(
-          'Tests unitarios y de integración (supertest en la API, Testing Library en el frontend).',
-          'Unit and integration tests (supertest for the API, Testing Library for the UI).',
-          'Tests unitaires et d’intégration (supertest pour l’API, Testing Library pour l’UI).',
+          'Tests unitarios y de integración. Cada bug se arregla con el test que lo reproduce.',
+          'Unit and integration tests. Every bug is fixed together with the test that reproduces it.',
+          'Tests unitaires et d’intégration. Chaque bug est corrigé avec le test qui le reproduit.',
         ),
         spec: 'Vitest for unit and integration tests (supertest for the API, Testing Library for the UI)',
         recommended: true,
@@ -773,28 +872,21 @@ export const STEPS: Step[] = [
         id: 'q-eslint',
         label: 'ESLint',
         description: L(
-          'eslint + @typescript-eslint, cero warnings en CI.',
-          'eslint + @typescript-eslint, zero warnings in CI.',
-          'eslint + @typescript-eslint, zéro avertissement en CI.',
+          'eslint + @typescript-eslint, cero warnings antes de commitear.',
+          'eslint + @typescript-eslint, zero warnings before committing.',
+          'eslint + @typescript-eslint, zéro avertissement avant de commiter.',
         ),
         spec: 'ESLint with @typescript-eslint, zero warnings allowed',
         deps: { frontendDev: ['eslint', '@typescript-eslint/eslint-plugin', '@typescript-eslint/parser'] },
       },
       {
-        id: 'q-english-code',
-        label: L('Código en inglés', 'Code in English', 'Code en anglais'),
-        description: L(
-          'Identificadores, comentarios y commits en inglés; la interfaz puede estar en otro idioma.',
-          'Identifiers, comments and commits in English; the UI may be localised.',
-          'Identifiants, commentaires et commits en anglais ; l’interface peut être localisée.',
-        ),
-        spec: 'Code, comments and commits in English; UI strings may be localised',
-        recommended: true,
-      },
-      {
         id: 'q-conventional',
         label: 'Conventional commits',
-        description: L('feat:, fix:, chore: … con alcance.', 'feat:, fix:, chore: … with a scope.', 'feat:, fix:, chore: … avec une portée.'),
+        description: L(
+          'feat:, fix:, chore: … con alcance.',
+          'feat:, fix:, chore: … with a scope.',
+          'feat:, fix:, chore: … avec une portée.',
+        ),
         spec: 'Conventional commits',
       },
     ],

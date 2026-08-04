@@ -56,6 +56,13 @@ The data flow is one-way: `Blueprint` → `buildContext()` → generators →
   the build if one is missing.
 - Adding a technology means adding one `TechOption` to `src/catalog/steps.ts` —
   never special-casing it in a component or a generator.
+- The catalog is **opinionated on purpose**. If a decision was already made for
+  this stack, the option is `locked` (always on, not clickable) rather than a
+  choice with a "recommended" badge. Only add a real alternative when both
+  branches are ones we would genuinely ship.
+- Both themes must work. Every colour goes through the `--color-ink-*` /
+  `--color-accent*` tokens, which `:root[data-theme='light']` overrides — never
+  hard-code a hex or add a `dark:` variant.
 - Every gotcha in `src/catalog/gotchas.ts` must be real: something that actually
   broke a deployment, with the fix. This library is the point of the app; do not
   pad it with generic advice.
@@ -68,6 +75,14 @@ An option can require another (`feat-uploads` requires `storage-minio`). When th
 prerequisite is deselected, `prune()` in `lib/blueprint.ts` drops the dependent
 selection. Without it the wizard happily generates a prompt describing an upload
 endpoint with nowhere to put the bytes.
+
+### `touched` is what makes defaults safe
+
+`normalize()` seeds a visible step with its locked + recommended options only if
+the user has never interacted with it. Without that flag, switching branch could
+not seed the newly revealed steps (they would arrive empty) *and* deliberately
+emptying a step — "no login on this project" — would be undone on the next
+render. Locked ids do not count as an answer when deciding whether to seed.
 
 ### The step list is dynamic
 

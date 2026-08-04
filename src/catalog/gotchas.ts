@@ -44,7 +44,7 @@ The \`-v\` is critical: \`/app/node_modules\` is an anonymous volume; without re
   {
     id: 'prisma-camelcase',
     title: 'Prisma generates camelCase column names — quote them in raw SQL',
-    when: ['db-postgres-prisma', 'db-postgres-pgvector', 'db-sqlite-prisma'],
+    when: ['db-postgres-prisma'],
     body: `Prisma maps model fields directly to column names with no snake_case conversion: \`documentId\` → \`"documentId"\`.
 
 In **all** raw SQL (\`$queryRaw\`, \`$executeRaw\`, SQL functions) quote camelCase identifiers:
@@ -55,13 +55,13 @@ WHERE "documentId" = ANY('{id1,id2}'::text[])
   {
     id: 'prisma-text-ids',
     title: 'All IDs are `text`, not `uuid`',
-    when: ['db-postgres-prisma', 'db-postgres-pgvector'],
+    when: ['db-postgres-prisma'],
     body: `\`String @id @default(uuid())\` maps to PostgreSQL \`text\`, not \`uuid\`. Raw queries and SQL functions must use \`text\`/\`text[]\`, never \`::uuid\` — casting produces \`operator does not exist: text = uuid\`.`,
   },
   {
     id: 'sql-array-literal',
     title: 'SQL array literals take no inner quotes',
-    when: ['db-postgres-pgvector'],
+    when: ['db-pgvector'],
     body: `\`\`\`ts
 // ✓ ids have no special chars, so no inner quoting
 Prisma.raw(\`'{\${ids.join(',')}}'\`)   // '{5fa...,6fb...}'::text[]
@@ -74,7 +74,7 @@ Void-returning SQL functions need \`$executeRaw\`; \`$queryRaw\` fails with "Fai
   {
     id: 'prisma-never-reset',
     title: 'NEVER run `prisma migrate reset` / `migrate dev` on a shared dev DB',
-    when: ['db-postgres-prisma', 'db-postgres-pgvector', 'db-sqlite-prisma'],
+    when: ['db-postgres-prisma'],
     body: `When migration history drifts from real DB state, \`prisma migrate dev\` offers to **reset the database** — accepting drops and recreates the entire public schema, destroying all data. No dry-run, no undo. This has already wiped one dev database on this stack.
 
 **Always use \`prisma db push\` for schema changes.** It reconciles the schema without touching migration history and is non-destructive for additive changes (new nullable columns, new tables).
@@ -87,7 +87,7 @@ docker exec database pg_dump -U postgres -d APP_DB > backup-$(date +%Y%m%d-%H%M)
   {
     id: 'better-auth-scrypt',
     title: 'Better Auth uses scrypt — a bcrypt check will always fail',
-    when: ['auth-better-auth', 'auth-better-auth-jwt'],
+    when: ['auth-better-auth-jwt'],
     body: `Better Auth stores passwords with \`oslo/password\` (scrypt), format \`salt:hash\` hex. Any endpoint verifying with \`bcrypt.compare()\` returns 401 forever.
 
 Issue the app JWT from the **existing session** instead of re-verifying the password: after \`POST /api/auth/sign-in/email\` succeeds, call \`GET /api/auth/jwt-from-session\` with the session cookie and store the token in localStorage.
@@ -189,6 +189,40 @@ Coolify builds **on the production server**, next to the running containers: cap
     body: `Browsers talk to nginx only. Backend and database sit on an internal network with no host port bindings in production; the backend port is exposed locally for debugging only.
 
 Keep \`client_max_body_size\` in sync with the API's upload limit, and set \`proxy_read_timeout\` above the slowest endpoint (long LLM or pipeline calls otherwise die at 60s with a 504 that looks like a backend crash).`,
+  },
+  {
+    id: 'supabase-anon-key',
+    title: 'The anon key is public — RLS is the only thing protecting your data',
+    when: ['sb-core'],
+    body: `\`VITE_SUPABASE_ANON_KEY\` is inlined into the JavaScript bundle. Anyone can read it from devtools and query your database directly with it. That is by design — it is not a secret and rotating it changes nothing.
+
+What actually restricts access is Row Level Security. A table without RLS enabled is world-readable to anyone who opens the site.
+
+The \`service_role\` key **bypasses RLS entirely**. It must never appear in the frontend, in a \`VITE_*\` variable, or in a commit — only in Edge Functions or a server you control.`,
+  },
+  {
+    id: 'supabase-rls',
+    title: 'A table with RLS enabled and no policy returns nothing',
+    when: ['sb-rls'],
+    body: `Enabling RLS denies everything by default; each operation needs its own policy (\`select\`, \`insert\`, \`update\`, \`delete\`). The usual symptom is a query that returns an empty array with no error, which reads exactly like "no data yet".
+
+Write policies against \`auth.uid()\`, keep them in \`supabase/migrations/\` like any other schema change, and test each one signed in as a real user — the dashboard's SQL editor runs as \`service_role\` and bypasses every policy you are trying to verify.`,
+  },
+  {
+    id: 'ai-keys-server-side',
+    title: 'LLM API keys never reach the browser',
+    when: ['feat-ai'],
+    body: `Model keys live in backend environment variables only. Anything prefixed \`VITE_\` is compiled into the bundle and is public; a key that leaks this way is billed to you until you notice.
+
+Route every model call through your own endpoint, and keep the model id in configuration rather than hard-coded, so switching models does not need a code change.`,
+  },
+  {
+    id: 'ai-timeouts',
+    title: 'LLM calls outlive the default proxy timeout',
+    when: ['feat-ai'],
+    body: `A streaming completion or a long document parse easily exceeds nginx's 60s \`proxy_read_timeout\`, producing a 504 that looks exactly like a backend crash. Raise the timeout on the routes that need it and stream responses where you can.
+
+Set an explicit per-request timeout on the provider client too: without one, a stalled upstream holds a connection — and its memory — for as long as the socket stays open.`,
   },
   {
     id: 'tailwind4-theme',

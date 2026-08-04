@@ -6,6 +6,11 @@ files, and the Docker/nginx/Coolify configuration that matches the choices.
 
 No backend, no database, no accounts. The blueprint lives in `localStorage`.
 
+It is deliberately opinionated: the pieces this stack has already settled on are
+shown as **stack baseline** and cannot be unticked. What remains toggleable is
+only what is genuinely a decision — Supabase or your own API, RAG or not,
+OpenRouter or direct provider SDKs, login or no login.
+
 ## Why it exists
 
 Starting a project with an agent means retyping the same brief every time — and
@@ -44,6 +49,7 @@ Everything the wizard shows and everything the generators emit comes from data:
 | `src/catalog/steps.ts` | the decision tree: steps, options, dependencies, npm packages, env vars |
 | `src/catalog/gotchas.ts` | production traps, each gated on the options that make it relevant |
 | `src/generators/` | the emitters: prompt, CLAUDE.md, Cursor rules, compose files, Dockerfiles, nginx |
+| `src/lib/memory.ts` | turns the host's RAM into the `mem_limit` of every service and the V8 heap caps |
 
 Adding a technology means adding one `TechOption`. The UI, the dependency
 resolution, the `.env.example` and the summary panel all follow automatically.

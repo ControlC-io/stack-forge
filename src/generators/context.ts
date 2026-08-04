@@ -1,6 +1,7 @@
 import { GOTCHAS, type Gotcha } from '@/catalog/gotchas';
 import type { Blueprint, EnvVar, ProjectMeta, ServiceId, TechOption } from '@/catalog/types';
 import { selectedIds, selectedOptions } from '@/lib/blueprint';
+import { planMemory, type MemoryPlan } from '@/lib/memory';
 import { envName, slugify } from '@/lib/utils';
 
 /** Everything the generators need, derived once from the blueprint. */
@@ -15,11 +16,14 @@ export interface Ctx {
   env: EnvVar[];
   gotchas: Gotcha[];
   deps: { frontend: string[]; frontendDev: string[]; backend: string[]; backendDev: string[] };
+  memory: MemoryPlan;
   has: (id: string) => boolean;
   hasFrontend: boolean;
   hasBackend: boolean;
+  hasSupabase: boolean;
   hasDb: boolean;
   hasPostgres: boolean;
+  hasPgvector: boolean;
   hasNginx: boolean;
   hasCoolify: boolean;
   hasComposeDev: boolean;
@@ -42,8 +46,8 @@ export function buildContext(bp: Blueprint): Ctx {
   const services = new Set<ServiceId>();
   for (const o of options) for (const s of o.services ?? []) services.add(s);
 
-  const hasFrontend = has('fe-react-vite') || has('fe-nextjs');
-  const hasBackend = has('backend-express') || has('backend-fastify');
+  const hasFrontend = has('fe-react-vite');
+  const hasBackend = has('backend-express');
   const hasNginx = has('infra-nginx');
   if (hasFrontend) services.add('frontend');
   if (hasNginx) services.add('nginx');
@@ -77,11 +81,14 @@ export function buildContext(bp: Blueprint): Ctx {
       backend: uniq(options.flatMap((o) => o.deps?.backend ?? [])),
       backendDev: uniq(options.flatMap((o) => o.deps?.backendDev ?? [])),
     },
+    memory: planMemory(bp.meta, services),
     has,
     hasFrontend,
     hasBackend,
-    hasDb: has('db-postgres-prisma') || has('db-postgres-pgvector') || has('db-sqlite-prisma'),
-    hasPostgres: has('db-postgres-prisma') || has('db-postgres-pgvector'),
+    hasSupabase: has('stack-supabase'),
+    hasDb: has('db-postgres-prisma'),
+    hasPostgres: has('db-postgres-prisma'),
+    hasPgvector: has('db-pgvector'),
     hasNginx,
     hasCoolify: has('infra-coolify'),
     hasComposeDev: has('infra-compose-dev'),
