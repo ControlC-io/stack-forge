@@ -101,6 +101,18 @@ export function generateComposeDev(ctx: Ctx): string {
     networks: [internal_net]${deps.length ? '\n    depends_on:\n' + deps.join('\n') : ''}`);
   }
 
+  if (ctx.services.has('email_service')) {
+    services.push(`  email_service:
+    build: ./email_service
+    container_name: \${COMPOSE_PROJECT_NAME}_email
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./email_service:/app
+      - /app/node_modules
+    networks: [internal_net]`);
+  }
+
   if (ctx.hasFrontend) {
     services.push(`  frontend:
     build: ./frontend
@@ -288,8 +300,8 @@ export function generateComposeCoolify(ctx: Ctx): string {
 # Traefik (coolify-proxy) lives on the \`coolify\` network and Coolify attaches
 # these containers to it. An extra network puts nginx on two networks at once;
 # Traefik then picks one non-deterministically and half of the container
-# recreations end in permanent 504s. Services still reach each other by service
-# name (backend:3000, postgres:5432).
+# recreations end in permanent 504s. Containers still reach each other by their
+# service name, exactly as they would on a network you declared yourself.
 #
 # Differences from docker-compose.yml (local dev):
 #   - compiled artefacts, no dev servers, no source bind mounts
@@ -368,6 +380,43 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 `;
 }
 
+/**
+ * The email service is a second Node app, so it needs its own images — the
+ * Coolify compose builds it by path and Docker will not invent them.
+ */
+export function generateEmailDockerfile(mode: 'dev' | 'prod'): string {
+  if (mode === 'dev') {
+    return `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 3001
+CMD ["npm", "run", "dev"]
+`;
+  }
+  return `# syntax=docker/dockerfile:1.7
+FROM node:20-alpine AS builder
+WORKDIR /app
+# Coolify may inject NODE_ENV=production as a build ARG, which would skip the
+# devDependencies this stage needs.
+ENV NODE_ENV=development
+COPY package*.json ./
+RUN --mount=type=cache,id=npm-email,target=/root/.npm npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+EXPOSE 3001
+CMD ["node", "dist/index.js"]
+`;
+}
+
 export function generateEntrypoint(ctx: Ctx): string {
   const push = ctx.hasDb
     ? `
@@ -410,8 +459,13 @@ EXPOSE 80
 }
 
 export function generateNginxConf(ctx: Ctx, mode: 'dev' | 'prod'): string {
-  const root =
-    mode === 'prod'
+  // With no UI there is nothing to serve at `/` — say so instead of proxying to
+  // a container that does not exist.
+  const root = !ctx.hasFrontend
+    ? `    location / {
+      return 404;   # this project has no user interface
+    }`
+    : mode === 'prod'
       ? `    root /usr/share/nginx/html;
     index index.html;
 
@@ -478,25 +532,6 @@ ${root}
 }
 
 /* ------------------------------------------------------------ extras --- */
-
-export function generatePackageNotes(ctx: Ctx): string {
-  const block = (title: string, deps: string[], dev: string[]) =>
-    deps.length || dev.length
-      ? `### ${title}
-
-\`\`\`bash
-${deps.length ? `npm i ${deps.join(' ')}\n` : ''}${dev.length ? `npm i -D ${dev.join(' ')}` : ''}
-\`\`\``
-      : '';
-
-  const parts = [
-    block('frontend/', ctx.deps.frontend, ctx.deps.frontendDev),
-    block('backend/', ctx.deps.backend, ctx.deps.backendDev),
-  ].filter(Boolean);
-
-  if (!parts.length) return '';
-  return `# Dependencies\n\nInstall commands derived from the selected stack.\n\n${parts.join('\n\n')}\n`;
-}
 
 export function generateCi(ctx: Ctx): string {
   const jobs: string[] = [];

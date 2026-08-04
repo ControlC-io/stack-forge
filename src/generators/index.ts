@@ -11,11 +11,11 @@ import {
   generateCi,
   generateComposeCoolify,
   generateComposeDev,
+  generateEmailDockerfile,
   generateEntrypoint,
   generateEnvExample,
   generateNginxConf,
   generateNginxDockerfileProd,
-  generatePackageNotes,
   generateReadme,
 } from './infra';
 import { generatePrompt } from './prompt';
@@ -88,14 +88,29 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
       });
     }
   }
+  if (ctx.services.has('email_service')) {
+    if (ctx.hasComposeDev) {
+      files.push({
+        path: 'email_service/Dockerfile',
+        language: 'dockerfile',
+        contents: generateEmailDockerfile('dev'),
+      });
+    }
+    if (ctx.hasCoolify) {
+      files.push({
+        path: 'email_service/Dockerfile.prod',
+        language: 'dockerfile',
+        contents: generateEmailDockerfile('prod'),
+      });
+    }
+  }
   if (ctx.has('infra-ci')) {
     files.push({ path: '.github/workflows/ci.yml', language: 'yaml', contents: generateCi(ctx) });
   }
 
-  const pkg = generatePackageNotes(ctx);
-  if (pkg) files.push({ path: 'DEPENDENCIES.md', language: 'markdown', contents: pkg });
-
-  return files;
+  // One trailing newline on every file, always: POSIX tools expect it and a
+  // missing one shows up as a spurious diff on the very first edit.
+  return files.map((f) => ({ ...f, contents: `${f.contents.replace(/\s+$/, '')}\n` }));
 }
 
 export { buildContext };

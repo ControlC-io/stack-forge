@@ -32,12 +32,15 @@ schema and its policies as the security boundary, and keep them in
 truth.`;
   }
 
-  if (!ctx.hasNginx && !ctx.hasBackend) {
+  if (!ctx.hasBackend) {
+    const served = ctx.hasNginx
+      ? '\n\n```\nBrowser ──▶ nginx ──▶ static bundle\n```\n\nnginx serves the built files and nothing else: there is no upstream to proxy to.'
+      : '';
     return `## Architecture
 
-Single static SPA. No API, no database. All state lives in the browser
-(localStorage), so every feature must survive a hard refresh and a cleared
-storage without crashing.`;
+A single static SPA. No API, no database, no server-side state. Everything lives
+in the browser, so every feature must survive a hard refresh and a cleared
+storage without crashing, and nothing sensitive can be kept secret.${served}`;
   }
 
   const backing = [
@@ -49,15 +52,18 @@ storage without crashing.`;
     .map((s, i) => `\n                            ${i === backing.length - 1 ? '└─' : '├─'} ${s}`)
     .join('');
 
+  const uiRow = ctx.hasFrontend
+    ? '\n       ├─ /            → frontend (static bundle in prod, Vite dev server in dev)'
+    : '';
+
   const topology = ctx.hasNginx
     ? `\`\`\`
 Browser
-  └─ nginx  (the ONLY published entrypoint)
-       ├─ /            → frontend (static bundle in prod, Vite dev server in dev)
+  └─ nginx  (the ONLY published entrypoint)${uiRow}
        └─ /api/*       → backend:3000${backingTree}
 \`\`\`
 
-Network split: \`dmz_net\` holds nginx and the frontends; \`internal_net\` holds the
+Network split: \`dmz_net\` holds nginx${ctx.hasFrontend ? ' and the frontend' : ''}; \`internal_net\` holds the
 backend, database and storage. Only nginx publishes host ports.`
     : `The API is the only service. It listens on \`PORT\` and is reached directly.`;
 
@@ -68,12 +74,35 @@ backend, database and storage. Only nginx publishes host ports.`
 
 1. \`POST /api/auth/sign-in/email\` → Better Auth creates the session cookie
 2. \`GET /api/auth/jwt-from-session\` (with that cookie) → the app issues its own JWT
-3. The frontend stores the JWT and sends \`Authorization: Bearer <jwt>\` on every call
+3. ${ctx.hasFrontend ? 'The frontend' : 'The client'} stores the JWT and sends \`Authorization: Bearer <jwt>\` on every call
 
 Never re-verify the password to mint the JWT — the session is already proof.`
     : '';
 
   return `## Architecture\n\n${topology}${authFlow}`;
+}
+
+function dependencySection(ctx: Ctx): string {
+  const block = (title: string, deps: string[], dev: string[]) =>
+    deps.length || dev.length
+      ? `\`\`\`bash
+# ${title}
+${deps.length ? `npm i ${deps.join(' ')}\n` : ''}${dev.length ? `npm i -D ${dev.join(' ')}` : ''}
+\`\`\``
+      : '';
+
+  const parts = [
+    block('frontend/', ctx.deps.frontend, ctx.deps.frontendDev),
+    block('backend/', ctx.deps.backend, ctx.deps.backendDev),
+  ].filter(Boolean);
+
+  if (!parts.length) return '';
+  return `## Dependencies
+
+Derived from the stack above. Install these and nothing else — an unlisted
+package means the stack changed, which is a conversation, not a commit.
+
+${parts.join('\n\n')}`;
 }
 
 function planSection(ctx: Ctx): string {
@@ -111,7 +140,11 @@ function conventionsSection(ctx: Ctx): string {
   if (ctx.has('q-conventional')) rules.push('Conventional commits (`feat:`, `fix:`, `chore:`) with a scope.');
   if (ctx.has('q-vitest')) rules.push('Vitest for tests. Every bug fix lands with the test that reproduces it.');
   if (ctx.has('q-eslint')) rules.push('ESLint must pass with zero warnings before a commit.');
-  rules.push('Secrets live only in `.env` on the server — never in the database, never in the frontend bundle, never committed.');
+  rules.push(
+    `Secrets live only in \`.env\` on the server — never in the database, never in ${
+      ctx.hasFrontend ? 'the frontend bundle' : 'anything a client can read'
+    }, never committed.`,
+  );
   if (ctx.has('rbac-simple')) rules.push('Every business route goes through the role guard. No data endpoint is ever left unauthenticated.');
   if (ctx.hasPostgres) rules.push('In raw SQL always quote camelCase identifiers and use `text[]`, never `uuid[]`.');
   if (ctx.hasFrontend) rules.push('Reuse the existing UI primitives; do not introduce a second component library.');
@@ -143,10 +176,14 @@ Coolify's own containers (~1.2 GB), roughly **${availableGb.toFixed(1)} GB** is 
 |---|---|
 ${rows}
 
-The API's V8 heap is capped at **${nodeHeap} MB**, below its container limit, so the
-garbage collector reclaims instead of the kernel OOM-killing the container. Build
-stages are capped at **${buildHeap} MB** because Coolify builds on the production
-server, next to the running containers.
+${
+    ctx.hasBackend
+      ? `The API's V8 heap is capped at **${nodeHeap} MB**, below its container limit, so
+the garbage collector reclaims instead of the kernel OOM-killing the container.
+`
+      : ''
+  }Build stages are capped at **${buildHeap} MB** because Coolify builds on the
+production server, next to the running containers.
 
 Swap file on the host: **${swap ? 'yes' : 'NO — add one before the first deploy'}**.
 ${warnings.length ? '\n' + warnings.map((w) => `> ⚠️ ${w}`).join('\n\n') : ''}`;
@@ -177,6 +214,7 @@ end of this document are the reason.`,
     `## Product\n\n${description}`,
     architectureSection(ctx),
     stackSection(ctx),
+    dependencySection(ctx),
     planSection(ctx),
     conventionsSection(ctx),
     budgetSection(ctx),

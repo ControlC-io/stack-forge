@@ -19,7 +19,7 @@ export const GOTCHAS: Gotcha[] = [
     id: 'compose-project-name',
     title: 'COMPOSE_PROJECT_NAME prefixes volume names',
     when: ['infra-compose-dev'],
-    body: `\`COMPOSE_PROJECT_NAME\` in \`.env\` prefixes container names, networks **and volume names** (e.g. \`myapp_postgres_data\`). Changing it on an existing project makes Compose create **new empty volumes** — the data is not deleted, it is orphaned under the old volume name.
+    body: `\`COMPOSE_PROJECT_NAME\` in \`.env\` prefixes container names, networks **and volume names** (e.g. \`myapp_data\`). Changing it on an existing project makes Compose create **new empty volumes** — the data is not deleted, it is orphaned under the old volume name.
 
 To run several clones on one machine: unique \`COMPOSE_PROJECT_NAME\` **and** unique host ports per clone.`,
   },
@@ -128,7 +128,7 @@ Develop against \`http://127.0.0.1\` and list both spellings in \`TRUSTED_ORIGIN
     id: 'vite-allowed-hosts',
     title: 'Vite needs `allowedHosts: true` behind a proxy',
     when: ['fe-react-vite'],
-    body: `Vite 5.3+ blocks requests whose \`Host\` header it does not recognise. nginx proxies with \`Host: main_frontend\`, which Vite rejects with 403. Set \`server.allowedHosts = true\` in \`vite.config.ts\`.`,
+    body: `Vite 5.3+ blocks requests whose \`Host\` header it does not recognise. nginx proxies with the container's service name as the \`Host\` (\`Host: frontend\`), which Vite rejects with a 403 that looks like a routing bug. Set \`server.allowedHosts = true\` in \`vite.config.ts\`.`,
   },
   {
     id: 'coolify-no-networks',
@@ -138,7 +138,7 @@ Develop against \`http://127.0.0.1\` and list both spellings in \`TRUSTED_ORIGIN
 
 Traefik (\`coolify-proxy\`) lives on the \`coolify\` network and Coolify attaches your containers to it. Declaring an extra network puts nginx on **two** networks at once; Traefik then picks one non-deterministically. Pick the custom one and it has no route → every request 504s until something restarts the proxy. The coin flip happens on **every container recreation**, which is why the outages look random and "fix themselves".
 
-Coolify's docs are explicit: no custom network definitions. Services still reach each other by service name (\`backend:3000\`, \`postgres:5432\`).`,
+Coolify's docs are explicit: no custom network definitions. Containers still reach each other by their service name, exactly as they would on a network you declared yourself.`,
   },
   {
     id: 'coolify-memory',
@@ -164,7 +164,7 @@ Give the backend a generous \`start_period\` (the entrypoint runs \`prisma db pu
     id: 'coolify-logging',
     title: 'Rotate container logs or the disk fills',
     when: ['infra-coolify'],
-    body: `Docker's default \`json-file\` driver grows without bound. Unrotated nginx access logs plus API stdout fill the disk in weeks, and a full disk takes postgres — and therefore everything — down. Apply a \`max-size: 10m\` / \`max-file: 3\` anchor to every service.
+    body: `Docker's default \`json-file\` driver grows without bound. Unrotated access logs and container stdout fill the disk in weeks, and a full disk takes every container on the host down with it — starting with whichever one needs to write next. Apply a \`max-size: 10m\` / \`max-file: 3\` anchor to every service.
 
 In the Coolify UI: enable the Docker cleanup cron, and keep **"Delete Unused Volumes" OFF**.`,
   },
@@ -174,7 +174,7 @@ In the Coolify UI: enable the Docker cleanup cron, and keep **"Delete Unused Vol
     when: ['infra-coolify'],
     body: `A buildtime \`NODE_ENV=production\` makes \`npm install\` skip devDependencies, so the build tools (starting with \`tsc\`) are missing and the build fails. Force \`ENV NODE_ENV=development\` in the builder stage and \`ENV NODE_ENV=production\` in the runtime stage.
 
-Coolify builds **on the production server**, next to the running containers: cap the build heap (\`NODE_OPTIONS=--max-old-space-size=1024\`) or the host OOM-killer takes down postgres mid-build. Serialise multiple frontend build stages for the same reason.
+Coolify builds **on the production server**, next to the running containers: cap the build heap (\`NODE_OPTIONS=--max-old-space-size=1024\`) or the host OOM-killer takes down a running container mid-build. Serialise multiple build stages for the same reason.
 
 \`VITE_*\` values are inlined at build time — they are public. Never put a secret in one.`,
   },
@@ -187,7 +187,7 @@ Coolify builds **on the production server**, next to the running containers: cap
   {
     id: 'nginx-single-entry',
     title: 'nginx is the only entrypoint',
-    when: ['infra-nginx'],
+    when: ['backend-express'],
     body: `Browsers talk to nginx only. Backend and database sit on an internal network with no host port bindings in production; the backend port is exposed locally for debugging only.
 
 Keep \`client_max_body_size\` in sync with the API's upload limit, and set \`proxy_read_timeout\` above the slowest endpoint (long LLM or pipeline calls otherwise die at 60s with a 504 that looks like a backend crash).`,

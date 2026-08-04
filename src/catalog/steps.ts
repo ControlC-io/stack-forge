@@ -102,7 +102,9 @@ export const STEPS: Step[] = [
           'Express + PostgreSQL + MinIO in Docker behind nginx, deployed to your VPS with Coolify. Full control, no usage billing.',
           'Express + PostgreSQL + MinIO dans Docker derrière nginx, déployé sur votre VPS avec Coolify. Contrôle total, sans facturation à l’usage.',
         ),
-        spec: 'Self-hosted API: Express + PostgreSQL + MinIO in Docker behind nginx, deployed on Coolify',
+        // No component list here: each one is its own line further down, and
+        // naming them twice risks describing a service the user turned off.
+        spec: 'A self-hosted stack: your own API and database in Docker behind nginx, deployed on Coolify',
         recommended: true,
         // No `notes`: the architecture section already draws this topology, and
         // repeating it in the stack list is noise in a document meant to be read.
@@ -116,9 +118,8 @@ export const STEPS: Step[] = [
           'Postgres, Auth et Storage managés. Le frontend (statique, sur votre VPS Coolify) parle directement à Supabase : aucune API propre n’est générée.',
         ),
         spec: 'Supabase as the backend (managed Postgres, Auth and Storage); the frontend talks to it directly',
-        notes: [
-          'There is no server of your own: the browser is the only client, so every security rule must be a Row Level Security policy in the database.',
-        ],
+        // No `notes`: the architecture section already makes the RLS point, and
+        // saying it twice in one document weakens it.
       },
       {
         id: 'stack-static',
@@ -384,7 +385,7 @@ export const STEPS: Step[] = [
           backendDev: ['typescript', 'ts-node-dev', '@types/express', '@types/cors', '@types/node'],
         },
         env: [{ key: 'PORT', value: '3000' }],
-        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck'],
+        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck', 'nginx-single-entry'],
         tasks: [
           'Build the API: one router per domain under `src/routes/`, zod validation at the edge, one centralised error handler.',
           'Expose `/api/health/live` (no database access) and `/api/health/ready` (checks dependencies).',
@@ -677,7 +678,7 @@ export const STEPS: Step[] = [
         ],
         gotchas: ['better-auth-scrypt'],
         tasks: [
-          'Wire Better Auth email/password; after sign-in, `GET /api/auth/jwt-from-session` mints the JWT the frontend uses.',
+          'Wire Better Auth email/password; after sign-in, `GET /api/auth/jwt-from-session` mints the JWT that clients send on every call.',
           'Add the auth middleware that verifies the JWT on every API route.',
         ],
       },
@@ -782,10 +783,11 @@ export const STEPS: Step[] = [
           'Serves the frontend and proxies /api/*. The only service with published ports.',
           'Sert le frontend et relaie /api/*. Le seul service avec des ports publiés.',
         ),
-        spec: 'nginx as the single published entrypoint (serves the static bundle, and proxies /api/* when there is an API)',
+        spec: 'nginx as the single published entrypoint',
         locked: true,
         services: ['nginx'],
-        gotchas: ['nginx-single-entry'],
+        // nginx-single-entry rides on the API option: it is about proxying and
+        // upload limits, neither of which exists without a backend.
       },
       {
         id: 'infra-coolify',
@@ -863,7 +865,9 @@ export const STEPS: Step[] = [
           'Unit and integration tests. Every bug is fixed together with the test that reproduces it.',
           'Tests unitaires et d’intégration. Chaque bug est corrigé avec le test qui le reproduit.',
         ),
-        spec: 'Vitest for unit and integration tests (supertest for the API, Testing Library for the UI)',
+        // Deliberately does not name supertest / Testing Library: those depend
+        // on workspaces this project may not have.
+        spec: 'Vitest for unit and integration tests',
         recommended: true,
         deps: { frontendDev: ['vitest'], backendDev: ['vitest', 'supertest'] },
       },

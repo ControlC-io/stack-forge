@@ -75,11 +75,13 @@ export function buildContext(bp: Blueprint): Ctx {
     services,
     env,
     gotchas,
+    // A workspace that does not exist gets no dependencies, however many
+    // cross-cutting options (testing, linting) would otherwise contribute to it.
     deps: {
-      frontend: uniq(options.flatMap((o) => o.deps?.frontend ?? [])),
-      frontendDev: uniq(options.flatMap((o) => o.deps?.frontendDev ?? [])),
-      backend: uniq(options.flatMap((o) => o.deps?.backend ?? [])),
-      backendDev: uniq(options.flatMap((o) => o.deps?.backendDev ?? [])),
+      frontend: hasFrontend ? uniq(options.flatMap((o) => o.deps?.frontend ?? [])) : [],
+      frontendDev: hasFrontend ? uniq(options.flatMap((o) => o.deps?.frontendDev ?? [])) : [],
+      backend: hasBackend ? uniq(options.flatMap((o) => o.deps?.backend ?? [])) : [],
+      backendDev: hasBackend ? uniq(options.flatMap((o) => o.deps?.backendDev ?? [])) : [],
     },
     memory: planMemory(bp.meta, services),
     has,
