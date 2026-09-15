@@ -12,7 +12,7 @@ React 19 + Vite, Tailwind 4 + shadcn, strict TypeScript, Vitest, ESLint,
 Express + Prisma + PostgreSQL, Coolify — is never asked. The wizard only asks
 what changes between projects: the kind of app, which features it needs (login,
 files, email, AI, semantic search, background jobs), interface extras, whether
-there is a design to follow, how the team works, and which Coolify server it
+there is a design to follow, and which Coolify server it
 goes to. Every question and option carries an "i" explaining why it matters.
 
 ## Why it exists

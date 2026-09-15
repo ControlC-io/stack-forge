@@ -639,40 +639,6 @@ export const STEPS: Step[] = [
     ],
   },
 
-  {
-    id: 'team',
-    why: L(
-      'Decide si se genera un workflow de CI. Con una sola persona haciendo push a main es un archivo que nadie mira.',
-      'It decides whether a CI workflow is generated. With one person pushing to main it is a file nobody looks at.',
-      'Détermine si un workflow de CI est généré. Avec une seule personne qui pousse sur main, c’est un fichier que personne ne regarde.',
-    ),
-    title: L('Equipo', 'Team', 'Équipe'),
-    question: L('¿Cómo se trabaja en este repo?', 'How is this repo worked on?', 'Comment travaille-t-on sur ce dépôt ?'),
-    help: L(
-      'Déjalo vacío si una sola persona hace push directo a main.',
-      'Leave it empty if one person pushes straight to main.',
-      'Laissez vide si une seule personne pousse directement sur main.',
-    ),
-    mode: 'multi',
-    options: [
-      {
-        id: 'infra-ci',
-        label: L('Pull requests o varias personas', 'Pull requests or several people', 'Pull requests ou plusieurs personnes'),
-        description: L(
-          'GitHub Actions compila y pasa los tests en cada push y pull request.',
-          'GitHub Actions builds and runs the tests on every push and pull request.',
-          'GitHub Actions compile et lance les tests à chaque push et pull request.',
-        ),
-        why: L(
-          'Coolify solo compila al desplegar: nunca ejecuta los tests. El CI es el único sitio donde corren, y solo sirve si alguien mira el resultado antes de fusionar.',
-          'Coolify only builds when it deploys; it never runs the tests. CI is the only place they run, and it only helps if someone checks the result before merging.',
-          'Coolify compile seulement au déploiement ; il ne lance jamais les tests. La CI est le seul endroit où ils tournent, utile seulement si quelqu’un vérifie le résultat avant de fusionner.',
-        ),
-        spec: 'GitHub Actions running build and tests on every push and pull request',
-      },
-    ],
-  },
-
   /* ---------------------------------------------------------- baseline --- */
 
   {

@@ -51,7 +51,6 @@ function variants(): Array<{ name: string; bp: Blueprint }> {
   });
   out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-minio') });
   out.push({ name: 'email service', bp: applyToggle(base, step('features'), 'feat-email') });
-  out.push({ name: 'team with CI', bp: applyToggle(base, step('team'), 'infra-ci') });
   out.push({ name: 'browser worker', bp: applyToggle(base, step('features'), 'feat-browser-worker') });
   out.push({ name: 'cron', bp: applyToggle(base, step('features'), 'feat-cron') });
   out.push({ name: 'claude design', bp: applyToggle(base, step('design'), 'design-claude') });
@@ -179,8 +178,9 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
     expect(agents.split('Never add a `networks:` block').length - 1).toBe(0);
   });
 
-  it('writes a CI workflow only when the team asked for one', () => {
-    expect(Boolean(byPath('.github/workflows/ci.yml'))).toBe(ctx.has('infra-ci'));
+  it('writes no CI workflow', () => {
+    // Coolify builds on deploy; a workflow nobody reviews is noise.
+    expect(files.some((f) => f.path.startsWith('.github/'))).toBe(false);
   });
 
   it('runs Docker locally only when there is a stack to run', () => {

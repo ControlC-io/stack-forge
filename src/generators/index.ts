@@ -4,7 +4,6 @@ import { generateAgentsMd, generateClaudePointer } from './instructions';
 import {
   generateBackendDockerfileDev,
   generateBackendDockerfileProd,
-  generateCi,
   generateComposeCoolify,
   generateComposeDev,
   generateEmailDockerfile,
@@ -105,9 +104,6 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
       language: 'dockerfile',
       contents: generateWorkerDockerfile(ctx),
     });
-  }
-  if (ctx.has('infra-ci')) {
-    files.push({ path: '.github/workflows/ci.yml', language: 'yaml', contents: generateCi(ctx) });
   }
 
   // One trailing newline on every file, always: POSIX tools expect it and a

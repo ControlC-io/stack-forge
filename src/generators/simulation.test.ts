@@ -74,9 +74,6 @@ function simulations(): Sim[] {
   }
   add('09 bare API', bare);
 
-  // CI on each shape: the workflow must only reference workspaces that exist.
-  add('09b fullstack + CI', applyToggle(base, step('team'), 'infra-ci'));
-  add('09c static + CI', applyToggle(applyToggle(base, step('stack'), 'stack-static'), step('team'), 'infra-ci'));
 
   // Every feature at once.
   let loaded = base;
@@ -88,8 +85,7 @@ function simulations(): Sim[] {
   // The scraper shape (pmp-scrapper, vitals): a Playwright worker on a schedule.
   let scraper = applyToggle(base, step('features'), 'feat-browser-worker');
   scraper = applyToggle(scraper, step('features'), 'feat-cron');
-  scraper = applyToggle(scraper, step('team'), 'infra-ci');
-  add('10b browser worker + cron + CI', { ...scraper, meta: { ...META, appSize: 'large' } });
+  add('10b browser worker + cron', { ...scraper, meta: { ...META, appSize: 'large' } });
 
   // Every interface extra at once, on each shape.
   for (const stack of ['stack-fullstack', 'stack-static']) {
