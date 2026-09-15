@@ -704,7 +704,9 @@ export const STEPS: Step[] = [
           backendDev: ['typescript', 'ts-node-dev', '@types/express', '@types/cors', '@types/node'],
         },
         env: [{ key: 'PORT', value: '3000' }],
-        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck', 'nginx-single-entry'],
+        // coolify-memory rides here, not on Coolify: V8 heaps, upload buffers and
+        // database backups mean nothing to a stack whose only container is nginx.
+        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck', 'nginx-single-entry', 'coolify-memory'],
         tasks: [
           'Build the API: one router per domain under `src/routes/`, zod validation at the edge, one centralised error handler.',
           'Expose `/api/health/live` (no database access) and `/api/health/ready` (checks dependencies).',
@@ -796,7 +798,7 @@ export const STEPS: Step[] = [
         locked: true,
         // coolify-healthcheck rides on the API option instead: a stack whose
         // only container is nginx has no startup sequence to get wrong.
-        gotchas: ['coolify-no-networks', 'coolify-memory', 'coolify-logging', 'coolify-build-args'],
+        gotchas: ['coolify-no-networks', 'coolify-logging', 'coolify-build-args'],
         tasks: [
           'Deploy on Coolify: point the resource at `docker-compose.coolify.yml`, set the domain on the nginx service, and paste the env vars into the UI.',
         ],
