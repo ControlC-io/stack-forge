@@ -18,7 +18,7 @@ export function OutputView({ blueprint }: { blueprint: Blueprint }) {
   const [copied, setCopied] = useState(false);
 
   const active = files.find((f) => f.path === activePath) ?? files[0];
-  const slug = slugify(blueprint.meta.slug || blueprint.meta.name) || 'project';
+  const slug = slugify(blueprint.meta.name) || 'project';
 
   const copy = async (text: string) => {
     const ok = await copyToClipboard(text);

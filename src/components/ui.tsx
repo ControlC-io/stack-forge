@@ -1,4 +1,11 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
+import { useState } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SyntheticEvent,
+  TextareaHTMLAttributes,
+} from 'react';
 import { t, useLang } from '@/i18n';
 import { cn } from '@/lib/utils';
 
@@ -25,18 +32,73 @@ export function Button({ variant = 'outline', size = 'md', className, ...props }
   );
 }
 
+/**
+ * The "why is this needed?" marker. A span with role=button rather than a
+ * <button>, because it sits inside option cards that are buttons themselves;
+ * it stops the event so opening it never toggles the card or focuses a field.
+ */
+export function Info({ text }: { text: string }) {
+  const lang = useLang();
+  const [open, setOpen] = useState(false);
+  // Opening only, never toggling: a mouse click arrives right after the hover
+  // has already opened it, so a toggle would close it under the cursor.
+  const show = (e: SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(true);
+  };
+
+  return (
+    <span
+      className="relative inline-flex shrink-0 align-middle"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={t('why', lang)}
+        aria-expanded={open}
+        onClick={show}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') show(e);
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        onBlur={() => setOpen(false)}
+        className="flex size-4 cursor-help items-center justify-center rounded-full border border-ink-500 font-serif text-[10px] font-semibold italic leading-none text-ink-400 transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        i
+      </span>
+      {open ? (
+        <span
+          role="tooltip"
+          className="absolute top-full left-1/2 z-30 mt-2 w-64 -translate-x-1/2 rounded-lg border border-ink-600 bg-ink-850 p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink-200 shadow-lg"
+        >
+          {text}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function Field({
   label,
   hint,
+  why,
   children,
 }: {
   label: string;
   hint?: string;
+  why?: string;
   children: ReactNode;
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-ink-200">{label}</span>
+      <span className="flex items-center gap-1.5 text-sm font-medium text-ink-200">
+        {label}
+        {why ? <Info text={why} /> : null}
+      </span>
       {children}
       {hint ? <span className="block text-xs text-ink-400">{hint}</span> : null}
     </label>

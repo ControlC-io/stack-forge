@@ -66,6 +66,18 @@ export function quickstart(ctx: Ctx): QuickstartStep[] {
     });
   }
 
+  if (!ctx.hasComposeDev) {
+    steps.push({
+      title: L('Arranca el frontend en local', 'Start the frontend locally', 'Démarrez le frontend en local'),
+      detail: L(
+        'Sin API ni base de datos propias no hace falta Docker en local: basta con Vite.',
+        'With no API or database of your own there is no need for Docker locally: Vite is enough.',
+        'Sans API ni base de données propres, Docker est inutile en local : Vite suffit.',
+      ),
+      command: 'cd frontend && npm install && npm run dev',
+    });
+  }
+
   if (ctx.hasComposeDev) {
     steps.push({
       title: L(
@@ -83,23 +95,17 @@ export function quickstart(ctx: Ctx): QuickstartStep[] {
   }
 
   steps.push({
-    title: ctx.forCursor && !ctx.forClaude
-      ? L(
-          'Abre la carpeta en Cursor y pega BOOTSTRAP_PROMPT.md en el chat',
-          'Open the folder in Cursor and paste BOOTSTRAP_PROMPT.md into the chat',
-          'Ouvrez le dossier dans Cursor et collez BOOTSTRAP_PROMPT.md dans le chat',
-        )
-      : L(
-          'Abre la carpeta con el agente y pega BOOTSTRAP_PROMPT.md',
-          'Open the folder with your agent and paste BOOTSTRAP_PROMPT.md',
-          'Ouvrez le dossier avec votre agent et collez BOOTSTRAP_PROMPT.md',
-        ),
-    detail: L(
-      'Los ficheros de instrucciones ya están en su sitio: el agente los lee solo, no hace falta pegarlos.',
-      'The instruction files are already in place: the agent reads them on its own, no need to paste them.',
-      'Les fichiers d’instructions sont déjà en place : l’agent les lit seul, inutile de les coller.',
+    title: L(
+      'Abre la carpeta con Claude Code (o Cursor) y pega BOOTSTRAP_PROMPT.md',
+      'Open the folder with Claude Code (or Cursor) and paste BOOTSTRAP_PROMPT.md',
+      'Ouvrez le dossier avec Claude Code (ou Cursor) et collez BOOTSTRAP_PROMPT.md',
     ),
-    command: ctx.forCursor && !ctx.forClaude ? undefined : 'claude',
+    detail: L(
+      'AGENTS.md y CLAUDE.md ya están en su sitio: Claude Code y Cursor los leen solos.',
+      'AGENTS.md and CLAUDE.md are already in place: Claude Code and Cursor read them on their own.',
+      'AGENTS.md et CLAUDE.md sont déjà en place : Claude Code et Cursor les lisent seuls.',
+    ),
+    command: 'claude',
   });
 
   steps.push({
@@ -130,23 +136,24 @@ export function quickstart(ctx: Ctx): QuickstartStep[] {
     });
 
     steps.push({
-      title: ctx.memory.swap
+      title: ctx.memory.swap === true
         ? L(
             'Programa las copias de seguridad de la base de datos',
             'Schedule the database backups',
             'Planifiez les sauvegardes de la base de données',
           )
         : L(
-            'Crea el fichero de swap y programa las copias de seguridad',
-            'Create the swap file and schedule the database backups',
-            'Créez le fichier de swap et planifiez les sauvegardes',
+            'Comprueba el swap del servidor y programa las copias de seguridad',
+            'Check the host swap and schedule the database backups',
+            'Vérifiez le swap du serveur et planifiez les sauvegardes',
           ),
       detail: L(
         'Nada de esto puede vivir en el repo, así que es lo que siempre se olvida.',
         'None of this can live in the repo, which is exactly why it is always the thing that gets forgotten.',
         'Rien de tout cela ne peut vivre dans le dépôt, c’est précisément ce qu’on oublie toujours.',
       ),
-      warn: !ctx.memory.swap,
+      command: ctx.memory.swap === true ? undefined : 'swapon --show',
+      warn: ctx.memory.swap !== true,
     });
   }
 

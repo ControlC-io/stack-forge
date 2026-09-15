@@ -57,9 +57,12 @@ The data flow is one-way: `Blueprint` → `buildContext()` → generators →
 - Adding a technology means adding one `TechOption` to `src/catalog/steps.ts` —
   never special-casing it in a component or a generator.
 - The catalog is **opinionated on purpose**. If a decision was already made for
-  this stack, the option is `locked` (always on, not clickable) rather than a
-  choice with a "recommended" badge. Only add a real alternative when both
-  branches are ones we would genuinely ship.
+  this stack, the option is `locked` and lives in a `baseline: true` step: it is
+  selected but never shown as a screen. Question steps contain no locked options
+  (a catalog test enforces both). Only add a real alternative when both branches
+  are ones we would genuinely ship.
+- Known Coolify hosts live in `src/catalog/servers.ts`. Adding a server means one
+  entry there; the wizard offers it instead of asking for RAM figures.
 - Both themes must work. Every colour goes through the `--color-ink-*` /
   `--color-accent*` tokens, which `:root[data-theme='light']` overrides — never
   hard-code a hex or add a `dark:` variant.
@@ -71,10 +74,11 @@ The data flow is one-way: `Blueprint` → `buildContext()` → generators →
 
 ### Selections must be pruned, not just toggled
 
-An option can require another (`feat-uploads` requires `storage-minio`). When the
-prerequisite is deselected, `prune()` in `lib/blueprint.ts` drops the dependent
-selection. Without it the wizard happily generates a prompt describing an upload
-endpoint with nowhere to put the bytes.
+An option can require another (`rbac-simple` requires `auth-better-auth-jwt`,
+`ai-embeddings` requires `db-pgvector`). When the prerequisite is deselected,
+`prune()` in `lib/blueprint.ts` drops the dependent selection. Without it the
+wizard happily generates a prompt describing roles for an app nobody can log in
+to.
 
 ### `touched` is what makes defaults safe
 

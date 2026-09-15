@@ -10,15 +10,21 @@ const step = (id: string): Step => STEPS.find((s) => s.id === id)!;
 
 const META: ProjectMeta = {
   name: 'Folio App',
-  slug: 'folio-app',
   description: 'RAG document intelligence platform.',
   domain: 'folio.example.com',
-  httpPort: '80',
   extraContext: 'Customers are imported from an ERP nightly.',
+  serverId: 'controlc-vps',
+  appSize: 'medium',
   serverRamGb: '16',
-  serverOtherGb: '6',
   serverSwap: false,
 };
+
+/** A host that is not in the server list. */
+const custom = (ram: string, extra: Partial<ProjectMeta> = {}): Partial<ProjectMeta> => ({
+  serverId: 'custom',
+  serverRamGb: ram,
+  ...extra,
+});
 
 const withMeta = (bp: Blueprint, meta: Partial<ProjectMeta> = {}): Blueprint => ({
   ...bp,
@@ -30,23 +36,23 @@ function variants(): Array<{ name: string; bp: Blueprint }> {
   const base = withMeta(emptyBlueprint());
   const out: Array<{ name: string; bp: Blueprint }> = [{ name: 'default self-hosted', bp: base }];
 
-  for (const id of ['stack-supabase', 'stack-static', 'stack-api-only']) {
+  for (const id of ['stack-supabase', 'stack-static']) {
     out.push({ name: id, bp: applyToggle(base, step('stack'), id) });
   }
 
-  out.push({ name: 'cursor', bp: applyToggle(base, step('agent'), 'agent-cursor') });
-  out.push({ name: 'both agents', bp: applyToggle(base, step('agent'), 'agent-both') });
+  const ai = applyToggle(base, step('features'), 'feat-ai');
+  out.push({ name: 'ai', bp: ai });
+  out.push({ name: 'ai + parsing', bp: applyToggle(ai, step('ai-capabilities'), 'ai-parsing') });
 
-  const ai = applyToggle(base, step('backend'), 'feat-ai');
-  out.push({ name: 'ai + openrouter', bp: ai });
-  out.push({ name: 'ai + direct sdks', bp: applyToggle(ai, step('ai-provider'), 'ai-direct') });
-  out.push({ name: 'ai + ollama', bp: applyToggle(ai, step('ai-provider'), 'ai-local') });
-
-  out.push({ name: 'rag', bp: applyToggle(base, step('database'), 'db-pgvector') });
-  out.push({ name: 'no auth', bp: applyToggle(applyToggle(base, step('auth'), 'rbac-simple'), step('auth'), 'auth-better-auth-jwt') });
-  out.push({ name: 'no storage', bp: applyToggle(base, step('storage'), 'storage-minio') });
-  out.push({ name: 'email service', bp: applyToggle(base, step('backend'), 'feat-email') });
-  out.push({ name: 'tiny host', bp: withMeta(base, { serverRamGb: '2', serverOtherGb: '0', serverSwap: true }) });
+  out.push({ name: 'rag', bp: applyToggle(base, step('features'), 'db-pgvector') });
+  out.push({
+    name: 'no auth',
+    bp: applyToggle(applyToggle(base, step('features'), 'rbac-simple'), step('features'), 'auth-better-auth-jwt'),
+  });
+  out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-minio') });
+  out.push({ name: 'email service', bp: applyToggle(base, step('features'), 'feat-email') });
+  out.push({ name: 'claude design', bp: applyToggle(base, step('design'), 'design-claude') });
+  out.push({ name: 'tiny custom host', bp: withMeta(base, custom('2', { serverSwap: true })) });
 
   return out;
 }
@@ -137,10 +143,25 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
     expect(byPath('nginx/Dockerfile.prod')).toBeDefined();
   });
 
-  it('writes the agent instruction files the agent step asked for', () => {
-    expect(Boolean(byPath('CLAUDE.md'))).toBe(ctx.forClaude);
-    expect(Boolean(byPath('.cursor/rules/project.mdc'))).toBe(ctx.forCursor);
-    expect(Boolean(byPath('AGENTS.md'))).toBe(ctx.forClaude && ctx.forCursor);
+  it('writes the instructions for both agents, once', () => {
+    expect(byPath('AGENTS.md')).toBeDefined();
+    expect(byPath('CLAUDE.md')?.contents).toContain('@AGENTS.md');
+    // Cursor reads AGENTS.md itself; a rule pointing at it is a third copy.
+    expect(byPath('.cursor/rules/project.mdc')).toBeUndefined();
+  });
+
+  it('runs Docker locally only when there is a stack to run', () => {
+    expect(Boolean(byPath('docker-compose.yml'))).toBe(ctx.hasBackend);
+    expect(Boolean(byPath('nginx/nginx.conf'))).toBe(ctx.hasBackend);
+  });
+
+  it('serves presigned downloads through nginx whenever there is storage', () => {
+    const prod = byPath('nginx/nginx.coolify.conf')?.contents ?? '';
+    expect(prod.includes('location /app-files/')).toBe(ctx.services.has('minio'));
+  });
+
+  it('never describes a network split the production compose does not have', () => {
+    for (const f of files) expect(f.contents, f.path).not.toMatch(/dmz_net|internal_net/);
   });
 
   it('keeps Prisma out of a project with no Prisma', () => {
@@ -192,15 +213,18 @@ describe('prompt quality', () => {
     expect(deploy).toBeGreaterThan(verify);
   });
 
-  it('does not repeat the architecture in the stack list', () => {
-    const topology = 'Network topology: `dmz_net`';
-    expect(prompt.split(topology).length - 1, 'topology stated twice').toBeLessThanOrEqual(1);
+  it('names the traps in the prompt and spells them out once, in AGENTS.md', () => {
+    const agents = generateFiles(bp).find((f) => f.path === 'AGENTS.md')!.contents;
+    expect(prompt).toContain('NEVER declare a `networks:` block');
+    expect(agents).toContain('exit 137');
+    expect(agents).toContain('Always use `prisma db push`');
+    // The bodies are not duplicated into the prompt.
+    expect(prompt).not.toContain('exit 137** even when the host');
   });
 
-  it('spells out the traps rather than naming them', () => {
-    expect(prompt).toContain('NEVER declare a `networks:` block');
-    expect(prompt).toContain('prisma db push');
-    expect(prompt).toContain('exit 137');
+  it('does not list the deployment and quality baselines as stack items', () => {
+    expect(prompt).not.toContain('**Strict TypeScript everywhere**');
+    expect(prompt).not.toContain('**nginx as the single published entrypoint**');
   });
 
   it('stays a readable length', () => {
@@ -230,14 +254,22 @@ describe('server sizing reaches the generated files', () => {
     };
   };
 
-  it('reports the host size the user typed', () => {
-    const { prompt } = build({ serverRamGb: '16', serverOtherGb: '6' });
-    expect(prompt).toContain('**16 GB**');
-    expect(prompt).toContain('6 GB is already claimed by other stacks');
+  it('reports the server the user picked', () => {
+    const { prompt, compose } = build({});
+    expect(prompt).toContain('**ControlC VPS**');
+    expect(prompt).toContain('**15.3 GB**');
+    expect(prompt).toContain('shared with other Coolify projects');
+    expect(compose).toContain('ControlC VPS');
+  });
+
+  it('reports the RAM of a custom host', () => {
+    const { prompt } = build(custom('32'));
+    expect(prompt).toContain('**Custom host**');
+    expect(prompt).toContain('**32 GB**');
   });
 
   it('puts the computed limits in the compose file and the prompt, and they agree', () => {
-    const { ctx, prompt, compose } = build({ serverRamGb: '16', serverOtherGb: '6' });
+    const { ctx, prompt, compose } = build({ appSize: 'large' });
     for (const [service, limit] of Object.entries(ctx.memory.limits)) {
       const rendered = limit % 1024 === 0 ? `${limit / 1024}g` : `${limit}m`;
       expect(compose, `${service} limit missing from compose`).toContain(`mem_limit: ${rendered}`);
@@ -245,17 +277,23 @@ describe('server sizing reaches the generated files', () => {
     }
   });
 
-  it('scales the limits with the host', () => {
-    const small = build({ serverRamGb: '2', serverOtherGb: '0' });
-    const big = build({ serverRamGb: '32', serverOtherGb: '0' });
+  it('scales the limits with the app size', () => {
+    const small = build({ appSize: 'small' });
+    const big = build({ appSize: 'large' });
     expect(big.ctx.memory.limits.backend!).toBeGreaterThan(small.ctx.memory.limits.backend!);
     expect(small.ctx.memory.limits.backend!).toBeGreaterThanOrEqual(512);
   });
 
-  it('never lets the limits exceed what the host has', () => {
+  it('never gives a project more than the host has', () => {
+    const { ctx } = build(custom('4', { appSize: 'large' }));
+    expect(ctx.memory.availableGb).toBeLessThan(4);
+    expect(ctx.memory.warnings.join(' ')).toContain('less than the 6 GB');
+  });
+
+  it('never lets the limits exceed the budget', () => {
     for (const ram of ['2', '4', '8', '16', '64']) {
-      for (const other of ['0', '1', '6']) {
-        const { ctx } = build({ serverRamGb: ram, serverOtherGb: other });
+      for (const appSize of ['small', 'medium', 'large'] as const) {
+        const { ctx } = build(custom(ram, { appSize }));
         const claimed = Object.values(ctx.memory.limits).reduce((a, b) => a + b, 0);
         const budget = ctx.memory.availableGb * 1024;
         if (claimed > budget) {
@@ -269,7 +307,7 @@ describe('server sizing reaches the generated files', () => {
 
   it('keeps the V8 heap below the container limit', () => {
     for (const ram of ['2', '4', '16', '64']) {
-      const { ctx, compose, dockerfile } = build({ serverRamGb: ram });
+      const { ctx, compose, dockerfile } = build(custom(ram, { appSize: 'large' }));
       expect(ctx.memory.nodeHeap).toBeLessThan(ctx.memory.limits.backend!);
       expect(compose).toContain(`--max-old-space-size=${ctx.memory.nodeHeap}`);
       expect(dockerfile).toContain(`--max-old-space-size=${ctx.memory.buildHeap}`);
@@ -277,22 +315,28 @@ describe('server sizing reaches the generated files', () => {
   });
 
   it('warns about a missing swap file everywhere it matters', () => {
-    const without = build({ serverSwap: false });
+    const without = build(custom('8', { serverSwap: false }));
     expect(without.prompt).toContain('add one before the first deploy');
     expect(without.compose).toContain('no swap file');
 
-    const withSwap = build({ serverSwap: true });
+    const withSwap = build(custom('8', { serverSwap: true }));
     expect(withSwap.prompt).toContain('Swap file on the host: **yes**');
     expect(withSwap.compose).not.toContain('no swap file');
   });
 
+  it('does not claim swap on a known server nobody has checked', () => {
+    const { prompt, compose } = build({ serverSwap: true });
+    expect(prompt).toContain('Swap file on the host: **unconfirmed');
+    expect(compose).toContain('swapon --show');
+  });
+
   it('warns when the host is too small for the stack', () => {
-    const { ctx } = build({ serverRamGb: '2', serverOtherGb: '0' });
+    const { ctx } = build(custom('2'));
     expect(ctx.memory.warnings.length).toBeGreaterThan(0);
   });
 
   it('survives nonsense input instead of emitting NaN', () => {
-    const { ctx, compose } = build({ serverRamGb: '', serverOtherGb: 'abc' });
+    const { ctx, compose } = build(custom('', { appSize: 'huge' as never }));
     expect(Number.isFinite(ctx.memory.availableGb)).toBe(true);
     expect(compose).not.toMatch(/NaN|undefined/);
   });

@@ -8,12 +8,19 @@ export function generateEnvExample(ctx: Ctx): string {
     `# ${ctx.name} — copy to .env and fill in every value marked "required".`,
     `# Never commit the real .env.`,
     '',
-    `COMPOSE_PROJECT_NAME=${ctx.slug}`,
-    `# ⚠️ Changing COMPOSE_PROJECT_NAME orphans the existing volumes (data is not`,
-    `# deleted, it just stops being mounted). Pick it once.`,
-    '',
-    `HTTP_PORT=${ctx.meta.httpPort || '80'}`,
   ];
+
+  // Both only mean something to the local Docker stack.
+  if (ctx.hasComposeDev) {
+    lines.push(
+      `COMPOSE_PROJECT_NAME=${ctx.slug}`,
+      `# ⚠️ Changing COMPOSE_PROJECT_NAME orphans the existing volumes (data is not`,
+      `# deleted, it just stops being mounted). Pick it once.`,
+      '',
+      `# Local only — Traefik owns 80/443 in production.`,
+      `HTTP_PORT=80`,
+    );
+  }
 
   if (ctx.meta.domain.trim()) lines.push(`PUBLIC_URL=https://${ctx.meta.domain.trim()}`);
   lines.push('');
@@ -54,8 +61,7 @@ export function generateComposeDev(ctx: Ctx): string {
       test: ["CMD-SHELL", "pg_isready -U \${POSTGRES_USER} -d \${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 10
-    networks: [internal_net]`);
+      retries: 10`);
   }
 
   if (ctx.services.has('minio')) {
@@ -77,8 +83,7 @@ export function generateComposeDev(ctx: Ctx): string {
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    networks: [internal_net]`);
+      retries: 5`);
   }
 
   if (ctx.hasBackend) {
@@ -97,8 +102,7 @@ export function generateComposeDev(ctx: Ctx): string {
       - ./backend:/app
       # Anonymous volume keeps the image's node_modules; remove it with
       # \`docker compose rm -f -v backend\` after adding a dependency.
-      - /app/node_modules
-    networks: [internal_net]${deps.length ? '\n    depends_on:\n' + deps.join('\n') : ''}`);
+      - /app/node_modules${deps.length ? '\n    depends_on:\n' + deps.join('\n') : ''}`);
   }
 
   if (ctx.services.has('email_service')) {
@@ -109,8 +113,7 @@ export function generateComposeDev(ctx: Ctx): string {
     env_file: .env
     volumes:
       - ./email_service:/app
-      - /app/node_modules
-    networks: [internal_net]`);
+      - /app/node_modules`);
   }
 
   if (ctx.hasFrontend) {
@@ -120,8 +123,7 @@ export function generateComposeDev(ctx: Ctx): string {
     restart: unless-stopped
     volumes:
       - ./frontend:/app
-      - /app/node_modules
-    networks: [dmz_net]`);
+      - /app/node_modules`);
   }
 
   if (ctx.hasNginx) {
@@ -133,7 +135,6 @@ export function generateComposeDev(ctx: Ctx): string {
       - "\${HTTP_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    networks: [dmz_net, internal_net]
     depends_on:${ctx.hasFrontend ? '\n      - frontend' : ''}${ctx.hasBackend ? '\n      - backend' : ''}`);
   }
 
@@ -146,15 +147,12 @@ export function generateComposeDev(ctx: Ctx): string {
 #
 # On Windows use http://127.0.0.1, not http://localhost (WSL2 resolves localhost
 # to ::1 while Docker binds 0.0.0.0).
+#
+# No custom networks, same as production: every service shares the default
+# network and reaches the others by name.
 
 services:
 ${services.join('\n\n')}
-
-networks:
-  dmz_net:
-    driver: bridge
-  internal_net:
-    driver: bridge
 ${volumes.length ? '\nvolumes:\n' + volumes.join('\n') + '\n' : ''}`;
 }
 
@@ -162,7 +160,7 @@ ${volumes.length ? '\nvolumes:\n' + volumes.join('\n') + '\n' : ''}`;
 
 export function generateComposeCoolify(ctx: Ctx): string {
   const services: string[] = [];
-  const { limits, nodeHeap, totalGb, otherGb, availableGb, warnings } = ctx.memory;
+  const { limits, nodeHeap, hostLabel, totalGb, shared, availableGb, warnings } = ctx.memory;
   const limitOf = (id: keyof typeof limits, fallback: number) => mb(limits[id] ?? fallback);
 
   if (ctx.hasPostgres) {
@@ -302,22 +300,26 @@ export function generateComposeCoolify(ctx: Ctx): string {
 # Traefik then picks one non-deterministically and half of the container
 # recreations end in permanent 504s. Containers still reach each other by their
 # service name, exactly as they would on a network you declared yourself.
-#
+#${
+    ctx.hasComposeDev
+      ? `
 # Differences from docker-compose.yml (local dev):
 #   - compiled artefacts, no dev servers, no source bind mounts
 #   - config baked into images (Coolify cannot see repo files at runtime)
 #   - the frontend is a static bundle served by nginx, not its own container
 #   - no host port bindings; nginx uses \`expose\`
-#
-# MEMORY BUDGET — host: ${totalGb} GB total${otherGb > 0 ? `, ${otherGb} GB claimed by other stacks` : ''},
-# ~1.2 GB for the OS and Coolify itself, leaving ~${availableGb.toFixed(1)} GB for this stack.
+#`
+      : ''
+  }
+# MEMORY BUDGET — host: ${hostLabel}, ${totalGb} GB total${shared ? ', shared with other projects' : ''}.
+# This stack's share: ~${availableGb.toFixed(1)} GB.
 # The limits below are ceilings, not reservations: a service that exceeds ITS OWN
 # mem_limit is OOM-killed (exit 137) even with GB free on the box. Diagnose with
 # \`dmesg | grep -i oom\` and by telling exit 137 (kernel) from exit 1 (app).
 ${warnings.map((w) => `# ⚠️ ${w.replace(/\n/g, ' ')}`).join('\n') || '#'}
 
-# Docker's default json-file driver grows without bound. A full disk takes
-# postgres — and therefore everything — down.
+# Docker's default json-file driver grows without bound, and a full disk takes
+# every container on the host down with it.
 x-logging: &default-logging
   driver: json-file
   options:
@@ -332,7 +334,7 @@ ${volumes.length ? '\nvolumes:\n' + volumes.join('\n') + '\n' : ''}`;
 /* ------------------------------------------------------- dockerfiles --- */
 
 export function generateBackendDockerfileDev(): string {
-  return `FROM node:20-alpine
+  return `FROM node:24-alpine
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package*.json ./
@@ -350,7 +352,7 @@ export function generateBackendDockerfileProd(ctx: Ctx): string {
 # Multi-stage: compile with devDependencies, ship a slim runtime.
 
 # ---- builder ----
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
 # Coolify injects env vars as build ARGs. A buildtime NODE_ENV=production would
@@ -365,7 +367,7 @@ COPY . .
 RUN ${prismaGen}npm run build
 
 # ---- runtime ----
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
@@ -386,7 +388,7 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
  */
 export function generateEmailDockerfile(mode: 'dev' | 'prod'): string {
   if (mode === 'dev') {
-    return `FROM node:20-alpine
+    return `FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
@@ -396,7 +398,7 @@ CMD ["npm", "run", "dev"]
 `;
   }
   return `# syntax=docker/dockerfile:1.7
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 # Coolify may inject NODE_ENV=production as a build ARG, which would skip the
 # devDependencies this stage needs.
@@ -406,7 +408,7 @@ RUN --mount=type=cache,id=npm-email,target=/root/.npm npm ci --no-audit --no-fun
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
@@ -436,7 +438,7 @@ exec node dist/index.js
 export function generateNginxDockerfileProd(ctx: Ctx): string {
   const feStage = ctx.hasFrontend
     ? `# ---- frontend build ----
-FROM node:20-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 # Same reason as the backend image: Coolify may inject NODE_ENV=production.
 ENV NODE_ENV=development
@@ -497,6 +499,22 @@ export function generateNginxConf(ctx: Ctx, mode: 'dev' | 'prod'): string {
 `
     : '';
 
+  // MinIO has no domain of its own, so presigned download URLs are signed for
+  // this origin (MINIO_PUBLIC_URL) and nginx forwards the bucket path. Host must
+  // stay intact or the signature no longer matches.
+  const storage = ctx.services.has('minio')
+    ? `
+    # Keep in sync with MINIO_BUCKET.
+    location /app-files/ {
+      proxy_pass http://minio:9000;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_buffering off;
+    }
+`
+    : '';
+
   return `worker_processes auto;
 
 events {
@@ -524,7 +542,7 @@ http {
       access_log off;
       return 200 "ok\\n";
     }
-${api}
+${api}${storage}
 ${root}
   }
 }
@@ -545,7 +563,7 @@ export function generateCi(ctx: Ctx): string {
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -561,7 +579,7 @@ export function generateCi(ctx: Ctx): string {
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci

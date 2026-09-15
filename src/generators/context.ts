@@ -27,8 +27,6 @@ export interface Ctx {
   hasNginx: boolean;
   hasCoolify: boolean;
   hasComposeDev: boolean;
-  forClaude: boolean;
-  forCursor: boolean;
 }
 
 function uniq(values: string[]): string[] {
@@ -41,7 +39,7 @@ export function buildContext(bp: Blueprint): Ctx {
   const has = (id: string) => ids.has(id);
 
   const name = bp.meta.name.trim() || 'Nuevo proyecto';
-  const slug = slugify(bp.meta.slug || bp.meta.name) || 'app';
+  const slug = slugify(bp.meta.name) || 'app';
 
   const services = new Set<ServiceId>();
   for (const o of options) for (const s of o.services ?? []) services.add(s);
@@ -94,8 +92,6 @@ export function buildContext(bp: Blueprint): Ctx {
     hasNginx,
     hasCoolify: has('infra-coolify'),
     hasComposeDev: has('infra-compose-dev'),
-    forClaude: has('agent-claude-code') || has('agent-both'),
-    forCursor: has('agent-cursor') || has('agent-both'),
   };
 }
 

@@ -7,15 +7,16 @@ import { createContext, useContext } from 'react';
  * CLAUDE.md, compose files — is always English, because it is read by a coding
  * agent and lives in a repository whose code is English.
  */
-export const LANGS = ['en', 'es', 'fr'] as const;
+/** Display order of the language switcher; the first entry is the default. */
+export const LANGS = ['en', 'fr', 'es'] as const;
 export type Lang = (typeof LANGS)[number];
 
-export const DEFAULT_LANG: Lang = 'en';
+export const DEFAULT_LANG: Lang = LANGS[0];
 
 export const LANG_LABELS: Record<Lang, string> = {
   en: 'English',
-  es: 'Español',
   fr: 'Français',
+  es: 'Español',
 };
 
 /** A plain string means "identical in every language" (product names, mostly). */
@@ -23,7 +24,7 @@ export type I18nText = string | Partial<Record<Lang, string>>;
 
 export function tx(text: I18nText, lang: Lang): string {
   if (typeof text === 'string') return text;
-  return text[lang] ?? text.en ?? text.es ?? text.fr ?? '';
+  return text[lang] ?? text.en ?? text.fr ?? text.es ?? '';
 }
 
 export const LanguageContext = createContext<Lang>(DEFAULT_LANG);
@@ -36,9 +37,9 @@ type Dict = Record<Lang, string>;
 
 const UI = {
   tagline: {
-    es: '— plantillas de arranque para Claude Code y Cursor',
-    en: '— bootstrap templates for Claude Code and Cursor',
-    fr: '— modèles de démarrage pour Claude Code et Cursor',
+    es: 'Plantillas de arranque para Claude Code y Cursor',
+    en: 'Bootstrap templates for Claude Code and Cursor',
+    fr: 'Modèles de démarrage pour Claude Code et Cursor',
   },
   reset: { es: 'Empezar de cero', en: 'Start over', fr: 'Recommencer' },
   back: { es: 'Atrás', en: 'Back', fr: 'Retour' },
@@ -59,44 +60,76 @@ const UI = {
 
   screenServer: { es: 'Servidor', en: 'Server', fr: 'Serveur' },
   serverTitle: {
-    es: '¿Cómo es el servidor de Coolify?',
-    en: 'What does the Coolify host look like?',
-    fr: 'À quoi ressemble le serveur Coolify ?',
+    es: '¿En qué servidor de Coolify se despliega?',
+    en: 'Which Coolify server does it deploy to?',
+    fr: 'Sur quel serveur Coolify est-il déployé ?',
   },
   serverHelp: {
-    es: 'De aquí salen todos los mem_limit del compose de producción. Un contenedor que pasa su propio límite muere con exit 137 aunque sobre RAM en la máquina.',
-    en: 'Every mem_limit in the production compose comes from here. A container that exceeds its own limit dies with exit 137 even when the box has RAM to spare.',
-    fr: 'Tous les mem_limit du compose de production viennent d’ici. Un conteneur qui dépasse sa propre limite meurt avec exit 137, même si la machine a de la RAM libre.',
+    es: 'Con esto se calculan los límites de memoria del compose de producción. No hace falta tocar números.',
+    en: 'This sizes the memory limits of the production compose. No numbers to type.',
+    fr: 'Cela dimensionne les limites mémoire du compose de production. Aucun chiffre à saisir.',
+  },
+  serverCustom: { es: 'Otro servidor', en: 'Another server', fr: 'Autre serveur' },
+  serverCustomHint: {
+    es: 'Un VPS que no está en la lista: indica su RAM.',
+    en: 'A VPS that is not listed: enter its RAM.',
+    fr: 'Un VPS absent de la liste : indiquez sa RAM.',
   },
   serverRam: { es: 'RAM total del servidor (GB)', en: 'Total host RAM (GB)', fr: 'RAM totale du serveur (Go)' },
   serverRamHint: {
-    es: 'Lo que te dice `free -g` en el VPS.',
-    en: 'What `free -g` reports on the VPS.',
-    fr: 'Ce que `free -g` indique sur le VPS.',
-  },
-  serverOther: {
-    es: 'RAM que ya usan otros proyectos (GB)',
-    en: 'RAM already used by other projects (GB)',
-    fr: 'RAM déjà utilisée par d’autres projets (Go)',
-  },
-  serverOtherHint: {
-    es: 'Si el VPS es sólo para esta app, deja 0.',
-    en: 'Leave 0 if the VPS is dedicated to this app.',
-    fr: 'Laissez 0 si le VPS est dédié à cette app.',
+    es: 'Lo que muestra Coolify en Server Details.',
+    en: 'What Coolify shows under Server Details.',
+    fr: 'Ce que Coolify affiche dans Server Details.',
   },
   serverSwap: { es: 'El servidor tiene fichero de swap', en: 'The host has a swap file', fr: 'Le serveur a un fichier de swap' },
-  serverSwapHint: {
-    es: 'Sin swap, un pico puntual mata el contenedor en lugar de ralentizarlo.',
-    en: 'Without swap, one spike kills the container instead of slowing it down.',
-    fr: 'Sans swap, un pic tue le conteneur au lieu de le ralentir.',
+  appSize: {
+    es: '¿Cuánta memoria le damos a esta app?',
+    en: 'How much memory does this app get?',
+    fr: 'Combien de mémoire pour cette app ?',
   },
-  serverBudget: { es: 'Reparto calculado', en: 'Computed budget', fr: 'Répartition calculée' },
-  serverAvailable: {
-    es: 'disponible para este stack tras el sistema y Coolify (~1,2 GB)',
-    en: 'available to this stack after the OS and Coolify (~1.2 GB)',
-    fr: 'disponible pour ce stack après l’OS et Coolify (~1,2 Go)',
-  },
+  serverBudget: { es: 'Ver el reparto calculado', en: 'See the computed budget', fr: 'Voir la répartition calculée' },
   serverNodeHeap: { es: 'Heap de Node en la API', en: 'Node heap for the API', fr: 'Heap Node de l’API' },
+  why: { es: '¿Por qué hace falta?', en: 'Why is this needed?', fr: 'Pourquoi est-ce nécessaire ?' },
+  whyName: {
+    es: 'Da nombre al prompt, a COMPOSE_PROJECT_NAME y a los contenedores y volúmenes. Cambiarlo después deja huérfanos los volúmenes con los datos.',
+    en: 'It names the prompt, COMPOSE_PROJECT_NAME, the containers and the volumes. Changing it later orphans the volumes holding the data.',
+    fr: 'Il nomme le prompt, COMPOSE_PROJECT_NAME, les conteneurs et les volumes. Le changer plus tard rend orphelins les volumes contenant les données.',
+  },
+  whyDomain: {
+    es: 'Opcional. Rellena PUBLIC_URL en el .env.example; si aún no lo sabes, déjalo vacío.',
+    en: 'Optional. It fills PUBLIC_URL in .env.example; leave it empty if you do not know it yet.',
+    fr: 'Facultatif. Remplit PUBLIC_URL dans le .env.example ; laissez vide si vous ne le connaissez pas encore.',
+  },
+  whyDescription: {
+    es: 'Sí, es lo más importante. Es lo único que le dice al agente qué construir: va a la sección Product del prompt y al AGENTS.md. Vacía, el prompt dice TODO y el agente adivina.',
+    en: 'Yes, it is the most important part. It is the only thing telling the agent what to build: it goes into the Product section of the prompt and AGENTS.md. Empty, the prompt says TODO and the agent guesses.',
+    fr: 'Oui, c’est le plus important. C’est la seule chose qui dit à l’agent quoi construire : elle va dans la section Product du prompt et dans AGENTS.md. Vide, le prompt indique TODO et l’agent devine.',
+  },
+  whyExtra: {
+    es: 'Opcional. Para lo que las opciones no cubren: reglas de negocio, integraciones, el idioma de la interfaz. Se pega tal cual al final del prompt.',
+    en: 'Optional. For what the options do not cover: business rules, integrations, the UI language. It is pasted verbatim at the end of the prompt.',
+    fr: 'Facultatif. Pour ce que les options ne couvrent pas : règles métier, intégrations, langue de l’interface. Collé tel quel à la fin du prompt.',
+  },
+  whyServer: {
+    es: 'Cada contenedor recibe un mem_limit. Si lo supera muere con exit 137 aunque la máquina tenga RAM libre, así que los límites salen del servidor real.',
+    en: 'Every container gets a mem_limit. One that exceeds it dies with exit 137 even when the box has RAM free, so the limits come from the real host.',
+    fr: 'Chaque conteneur reçoit un mem_limit. S’il le dépasse, il meurt avec exit 137 même si la machine a de la RAM libre : les limites viennent donc du vrai serveur.',
+  },
+  whyAppSize: {
+    es: 'El VPS lo comparten varios proyectos. Esta es la parte que se lleva esta app, repartida entre la API, la base de datos y MinIO.',
+    en: 'Several projects share the VPS. This is the share of this app, split between the API, the database and MinIO.',
+    fr: 'Plusieurs projets partagent le VPS. C’est la part de cette app, répartie entre l’API, la base de données et MinIO.',
+  },
+  whyServerRam: {
+    es: 'Sin la RAM real, los límites de memoria serían una suposición.',
+    en: 'Without the real RAM, the memory limits would be a guess.',
+    fr: 'Sans la RAM réelle, les limites mémoire seraient une supposition.',
+  },
+  whySwap: {
+    es: 'Sin swap, un pico mata un contenedor en lugar de ralentizarlo. Si no hay, el resultado te pide crearlo.',
+    en: 'Without swap, a spike kills a container instead of slowing it down. If there is none, the output tells you to add it.',
+    fr: 'Sans swap, un pic tue un conteneur au lieu de le ralentir. S’il n’y en a pas, le résultat demande d’en ajouter.',
+  },
   requires: { es: 'Requiere', en: 'Requires', fr: 'Nécessite' },
   incompatible: { es: 'Incompatible con', en: 'Incompatible with', fr: 'Incompatible avec' },
   remove: { es: 'Quitar', en: 'Remove', fr: 'Retirer' },
@@ -111,16 +144,15 @@ const UI = {
     fr: 'Que construisez-vous ?',
   },
   metaHelp: {
-    es: 'Sólo el nombre es obligatorio. Todo lo demás se puede rellenar después en el repo generado.',
-    en: 'Only the name is required. Everything else can be filled in later in the generated repo.',
-    fr: 'Seul le nom est obligatoire. Le reste peut être complété plus tard dans le dépôt généré.',
+    es: 'Unas pocas preguntas y tendrás el prompt, las instrucciones del agente y la configuración de Docker y Coolify.',
+    en: 'A few questions and you get the prompt, the agent instructions and the Docker and Coolify configuration.',
+    fr: 'Quelques questions et vous obtenez le prompt, les instructions de l’agent et la configuration Docker et Coolify.',
   },
   fieldName: { es: 'Nombre del proyecto', en: 'Project name', fr: 'Nom du projet' },
-  fieldSlug: { es: 'Slug', en: 'Slug', fr: 'Slug' },
-  slugHint: {
-    es: 'Nombres de contenedores, volúmenes y COMPOSE_PROJECT_NAME.',
-    en: 'Container names, volume names and COMPOSE_PROJECT_NAME.',
-    fr: 'Noms des conteneurs, des volumes et COMPOSE_PROJECT_NAME.',
+  nameHint: {
+    es: 'También da nombre a los contenedores y volúmenes.',
+    en: 'Also names the containers and volumes.',
+    fr: 'Nomme aussi les conteneurs et les volumes.',
   },
   fieldDescription: { es: 'Descripción', en: 'Description', fr: 'Description' },
   descriptionHint: {
@@ -135,15 +167,9 @@ const UI = {
   },
   fieldDomain: { es: 'Dominio de producción', en: 'Production domain', fr: 'Domaine de production' },
   domainHint: {
-    es: 'Opcional. Se usa en el README y en el .env.example.',
-    en: 'Optional. Used in the README and .env.example.',
-    fr: 'Facultatif. Utilisé dans le README et le .env.example.',
-  },
-  fieldPort: { es: 'Puerto HTTP local', en: 'Local HTTP port', fr: 'Port HTTP local' },
-  portHint: {
-    es: 'Si ya tienes otro proyecto en el 80, cámbialo aquí.',
-    en: 'Change it if another project already owns port 80.',
-    fr: 'À changer si un autre projet occupe déjà le port 80.',
+    es: 'Opcional. El que pondrás en el servicio nginx de Coolify.',
+    en: 'Optional. The one you will set on the nginx service in Coolify.',
+    fr: 'Facultatif. Celui que vous mettrez sur le service nginx dans Coolify.',
   },
   fieldExtra: {
     es: 'Contexto extra para el agente',

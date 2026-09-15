@@ -41,6 +41,8 @@ export interface TechOption {
   label: I18nText;
   /** Shown in the wizard. Never lands in generated files. */
   description: I18nText;
+  /** Behind the "i": why someone would tick this, and what skipping it costs. */
+  why?: I18nText;
   /** English one-liner used in generated artifacts. Falls back to `label`. */
   spec?: string;
   recommended?: boolean;
@@ -70,25 +72,34 @@ export interface Step {
   title: I18nText;
   question: I18nText;
   help?: I18nText;
+  /** Behind the "i": why this question is asked at all. */
+  why?: I18nText;
   mode: 'single' | 'multi';
   options: TechOption[];
   /** Hide the whole step when the current selection makes it irrelevant. */
   visibleIf?: (sel: Selection) => boolean;
+  /**
+   * The ControlC baseline for this branch: every option is locked, so there is
+   * nothing to ask. Selected like any other step, never shown as a screen.
+   */
+  baseline?: boolean;
 }
+
+export type AppSize = 'small' | 'medium' | 'large';
 
 /** Free-text project metadata collected on the first screen. */
 export interface ProjectMeta {
   name: string;
-  slug: string;
   description: string;
   domain: string;
-  httpPort: string;
   extraContext: string;
-  /** Coolify host sizing — drives every mem_limit in the production compose. */
+  /** A known Coolify host from catalog/servers.ts, or 'custom'. */
+  serverId: string;
+  /** How much of the host this project may claim. */
+  appSize: AppSize;
+  /** Custom host only: total RAM. */
   serverRamGb: string;
-  /** GB already claimed on that host by other stacks. */
-  serverOtherGb: string;
-  /** Whether a swap file exists on the host. */
+  /** Custom host only: whether a swap file exists. */
   serverSwap: boolean;
 }
 

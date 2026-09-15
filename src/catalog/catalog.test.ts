@@ -65,10 +65,23 @@ describe('catalog integrity', () => {
       check(step.title, `step:${step.id}.title`);
       check(step.question, `step:${step.id}.question`);
       check(step.help, `step:${step.id}.help`);
+      check(step.why, `step:${step.id}.why`);
       for (const option of step.options) {
         check(option.label, `${option.id}.label`);
         check(option.description, `${option.id}.description`);
+        check(option.why, `${option.id}.why`);
       }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('explains why every question and every answer matters', () => {
+    // The "i" next to each choice is how someone new decides without asking.
+    const missing: string[] = [];
+    for (const step of STEPS) {
+      if (step.baseline) continue;
+      if (!step.why) missing.push(`step:${step.id}`);
+      for (const option of step.options) if (!option.why) missing.push(option.id);
     }
     expect(missing).toEqual([]);
   });
@@ -95,6 +108,16 @@ describe('catalog integrity', () => {
       if (step.mode !== 'single') continue;
       const locked = step.options.filter((o) => o.locked);
       expect(locked.length, `step "${step.id}" locks ${locked.length} options`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('keeps decisions and questions apart', () => {
+    // A baseline step is never shown, so a choice inside it could never be
+    // made; a locked option inside a question is a card nobody can click.
+    for (const step of STEPS) {
+      for (const option of step.options) {
+        expect(Boolean(option.locked), `${step.id}.${option.id}`).toBe(Boolean(step.baseline));
+      }
     }
   });
 

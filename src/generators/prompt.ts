@@ -7,7 +7,10 @@ const bullet = (lines: string[]) => lines.map((l) => `- ${l}`).join('\n');
 
 function stackSection(ctx: Ctx): string {
   // Generated output is always English, whatever the UI language is.
-  const lines = ctx.options.map((o) => `**${o.spec ?? tx(o.label, 'en')}**`);
+  // Deployment and quality baselines already are the Architecture, Plan and
+  // Conventions sections; listing them here as well is noise.
+  const listed = ctx.options.filter((o) => !o.id.startsWith('infra-') && !o.id.startsWith('q-'));
+  const lines = listed.map((o) => `**${o.spec ?? tx(o.label, 'en')}**`);
   const notes = ctx.options.flatMap((o) => o.notes ?? []);
   return joinSections([
     '## Stack\n\n' + bullet(lines),
@@ -55,16 +58,21 @@ storage without crashing, and nothing sensitive can be kept secret.${served}`;
   const uiRow = ctx.hasFrontend
     ? '\n       ├─ /            → frontend (static bundle in prod, Vite dev server in dev)'
     : '';
+  const storageRow = ctx.services.has('minio')
+    ? '\n       ├─ /app-files/  → minio:9000 (presigned downloads)'
+    : '';
 
   const topology = ctx.hasNginx
     ? `\`\`\`
 Browser
-  └─ nginx  (the ONLY published entrypoint)${uiRow}
+  └─ nginx  (the ONLY published entrypoint)${uiRow}${storageRow}
        └─ /api/*       → backend:3000${backingTree}
 \`\`\`
 
-Network split: \`dmz_net\` holds nginx${ctx.hasFrontend ? ' and the frontend' : ''}; \`internal_net\` holds the
-backend, database and storage. Only nginx publishes host ports.`
+In production nginx is the only service with a domain in Coolify: Traefik
+terminates TLS and hands every request to nginx, which serves the bundle and
+proxies \`/api\`${ctx.services.has('minio') ? ' and the storage bucket' : ''}. The backend, database${ctx.services.has('minio') ? ' and storage' : ''} get no domain
+and no published port, so nothing outside the stack can reach them.`
     : `The API is the only service. It listens on \`PORT\` and is reached directly.`;
 
   const authFlow = ctx.has('auth-better-auth-jwt')
@@ -154,23 +162,29 @@ function conventionsSection(ctx: Ctx): string {
 
 function gotchaSection(ctx: Ctx): string {
   if (!ctx.gotchas.length) return '';
-  const body = ctx.gotchas
-    .map((g) => `### ${g.title}\n\n${g.body}`)
-    .join('\n\n');
-  return `## Known traps (already paid for — do not rediscover them)\n\n${body}`;
+  // The full text lives in AGENTS.md, which the agent loads on its own. Pasting
+  // it here as well doubled the prompt and left two copies to keep in sync.
+  const titles = ctx.gotchas.map((g) => `- ${g.title}`).join('\n');
+  return `## Known traps (already paid for — do not rediscover them)\n\nEach one is written out, with its fix, in \`AGENTS.md\`. Read the entry before touching that area:\n\n${titles}`;
 }
 
 function budgetSection(ctx: Ctx): string {
   if (!ctx.hasCoolify) return '';
-  const { totalGb, otherGb, availableGb, limits, nodeHeap, buildHeap, swap, warnings } = ctx.memory;
+  const { hostLabel, totalGb, shared, availableGb, limits, nodeHeap, buildHeap, swap, warnings } = ctx.memory;
   const rows = Object.entries(limits)
     .map(([service, value]) => `| \`${service}\` | ${mb(value)} |`)
     .join('\n');
+  const swapLine =
+    swap === null
+      ? 'unconfirmed — check with `swapon --show` before the first deploy'
+      : swap
+        ? 'yes'
+        : 'NO — add one before the first deploy';
 
   return `## Production budget
 
-The target host has **${totalGb} GB** of RAM${otherGb > 0 ? `, of which ${otherGb} GB is already claimed by other stacks` : ''}. After the OS and
-Coolify's own containers (~1.2 GB), roughly **${availableGb.toFixed(1)} GB** is available to this project.
+The target host is **${hostLabel}** with **${totalGb} GB** of RAM${shared ? ', shared with other Coolify projects' : ''}.
+This project's share is **${availableGb.toFixed(1)} GB**, split across its containers.
 
 | Service | mem_limit |
 |---|---|
@@ -185,7 +199,7 @@ the garbage collector reclaims instead of the kernel OOM-killing the container.
   }Build stages are capped at **${buildHeap} MB** because Coolify builds on the
 production server, next to the running containers.
 
-Swap file on the host: **${swap ? 'yes' : 'NO — add one before the first deploy'}**.
+Swap file on the host: **${swapLine}**.
 ${warnings.length ? '\n' + warnings.map((w) => `> ⚠️ ${w}`).join('\n\n') : ''}`;
 }
 
@@ -209,8 +223,8 @@ export function generatePrompt(ctx: Ctx): string {
     `# Bootstrap prompt — ${ctx.name}`,
     `You are setting up a brand new repository from scratch. Read this whole brief
 before writing any code, then implement it in the order given below. Ask me
-before deviating from the stack: it is chosen deliberately and the traps at the
-end of this document are the reason.`,
+before deviating from the stack: it is chosen deliberately and the known traps
+in \`AGENTS.md\` are the reason.`,
     `## Product\n\n${description}`,
     architectureSection(ctx),
     stackSection(ctx),

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Hammer, Moon, RotateCcw, Sun } from 'lucide-react';
-import { visibleSteps } from '@/catalog/steps';
+import { ArrowLeft, ArrowRight, Moon, RotateCcw, Sun } from 'lucide-react';
+import { questionSteps, visibleSteps } from '@/catalog/steps';
 import type { Blueprint, ProjectMeta } from '@/catalog/types';
 import { has } from '@/catalog/types';
 import { buildContext } from '@/generators/context';
+import { Wordmark } from '@/components/Logo';
 import { MetaForm } from '@/components/MetaForm';
 import { ServerForm } from '@/components/ServerForm';
 import { OutputView } from '@/components/OutputView';
@@ -68,7 +69,8 @@ export default function App() {
   }, [lang]);
 
   const screens = useMemo<Screen[]>(() => {
-    const steps = visibleSteps(blueprint.selection).map<Screen>((s) => ({
+    // Baseline steps are selected but never asked: only real questions get a screen.
+    const steps = questionSteps(blueprint.selection).map<Screen>((s) => ({
       kind: 'step',
       id: s.id,
       title: s.title,
@@ -118,10 +120,11 @@ export default function App() {
       <div className="flex min-h-full flex-col">
         <header className="sticky top-0 z-10 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
           <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-5">
-            <div className="flex items-center gap-2">
-              <Hammer className="size-5 text-accent" />
-              <span className="font-semibold text-ink-100">ControlC Stack Forge</span>
-              <span className="hidden text-sm text-ink-500 sm:inline">{t('tagline', lang)}</span>
+            <div className="flex min-w-0 items-center gap-4">
+              <Wordmark />
+              <span className="hidden border-l border-ink-700 pl-4 text-sm text-ink-500 md:inline">
+                {t('tagline', lang)}
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -215,6 +218,7 @@ export default function App() {
               <ServerForm
                 meta={blueprint.meta}
                 services={buildContext(blueprint).services}
+                hasBackend={buildContext(blueprint).hasBackend}
                 onChange={setMeta}
               />
             ) : null}

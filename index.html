@@ -1,13 +1,33 @@
 <!doctype html>
-<html lang="es" data-theme="light">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ControlC Stack Forge</title>
+    <title>Stack Forge · ControlC</title>
     <meta
       name="description"
       content="Elige el stack de tu próximo proyecto y genera el prompt de arranque para Claude Code o Cursor."
     />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c111a" media="(prefers-color-scheme: dark)" />
+
+    <!-- Link previews need absolute URLs; the site lives under /stack-forge/. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ControlC Stack Forge" />
+    <meta property="og:title" content="Stack Forge · ControlC" />
+    <meta
+      property="og:description"
+      content="Bootstrap prompts, agent instructions and deploy config for new repositories."
+    />
+    <meta property="og:url" content="https://controlc-io.github.io/stack-forge/" />
+    <meta property="og:image" content="https://controlc-io.github.io/stack-forge/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script>
       // Runs before first paint. Without it a returning user who picked dark
       // gets a white flash until App.tsx mounts and stamps their choice.

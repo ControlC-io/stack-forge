@@ -66,6 +66,9 @@ function structureSection(ctx: Ctx): string {
     lib/              # api client, helpers
     index.css         # Tailwind entry + @theme tokens`);
   }
+  if (ctx.has('design-claude') || ctx.has('design-existing')) {
+    lines.push(`design/               # reference design — read it, never import from it`);
+  }
   if (ctx.hasBackend) {
     lines.push(`backend/
   src/
@@ -74,7 +77,7 @@ function structureSection(ctx: Ctx): string {
     middleware/       # auth, role guard, error handler
     index.ts          # app bootstrap + graceful shutdown${ctx.hasDb ? '\n  prisma/schema.prisma' : ''}`);
   }
-  if (ctx.hasNginx) lines.push(`nginx/nginx.conf      # the only entrypoint`);
+  if (ctx.hasNginx) lines.push(`nginx/                # the only entrypoint: serves the SPA${ctx.hasBackend ? ', proxies /api' : ''}`);
   if (!lines.length) return '';
   return '## Repository layout\n\n```\n' + lines.join('\n') + '\n```';
 }
@@ -92,8 +95,11 @@ function constraintsSection(ctx: Ctx): string {
   if (ctx.hasCoolify) {
     rules.push('Never add a `networks:` block to the Coolify compose file.');
     rules.push(
-      `Never raise a \`mem_limit\` without lowering another: the host has ${ctx.memory.totalGb} GB and the limits already add up to what is available.`,
+      `Never raise a \`mem_limit\` without lowering another: this project's share of ${ctx.memory.hostLabel} is ${ctx.memory.availableGb.toFixed(1)} GB and the limits already add up to it.`,
     );
+  }
+  if (ctx.has('design-claude') || ctx.has('design-existing')) {
+    rules.push('`design/` is the visual source of truth. New screens match it; colours and type come from the `@theme` tokens derived from it, never from hard-coded values.');
   }
   if (ctx.hasSupabase) {
     rules.push('Every table has RLS enabled with an explicit policy. The `service_role` key never leaves the server.');
@@ -112,26 +118,15 @@ function gotchasSection(ctx: Ctx): string {
   return `## ⚠️ Critical gotchas\n\nNon-obvious issues that have already cost real time. Read the relevant one before touching that area.\n\n${body}`;
 }
 
-export function generateClaudeMd(ctx: Ctx): string {
-  return joinSections([
-    `# CLAUDE.md\n\nGuidance for Claude Code when working on this repository.`,
-    `## Project overview\n\n**${ctx.name}** — ${ctx.meta.description.trim() || 'TODO: one-paragraph description.'}`,
-    commandsSection(ctx),
-    gotchasSection(ctx),
-    structureSection(ctx),
-    constraintsSection(ctx),
-  ]);
-}
-
 /**
- * The single source of truth when more than one agent is in play.
+ * The single source of truth for every agent.
  *
  * Three near-identical instruction files is how they drift: someone edits the
  * one their tool reads, and the other agent keeps working from the old rules.
  */
 export function generateAgentsMd(ctx: Ctx): string {
   return joinSections([
-    `# AGENTS.md\n\nInstructions for any coding agent working in this repository.\nThis is the source of truth: \`CLAUDE.md\` and \`.cursor/rules/\` point here.`,
+    `# AGENTS.md\n\nInstructions for any coding agent working in this repository.\nThis is the source of truth: Cursor and most agents read it directly, and \`CLAUDE.md\` imports it.`,
     `## Project overview\n\n**${ctx.name}** — ${ctx.meta.description.trim() || 'TODO: one-paragraph description.'}`,
     commandsSection(ctx),
     gotchasSection(ctx),
@@ -148,36 +143,5 @@ The instructions for this repository live in **AGENTS.md**, so that every agent
 reads the same rules. Do not duplicate them here.
 
 @AGENTS.md
-`;
-}
-
-/** What the Cursor rule becomes when AGENTS.md exists. */
-export function generateCursorPointer(ctx: Ctx): string {
-  return `---
-description: Project rules for ${ctx.name}
-globs:
-alwaysApply: true
----
-
-The instructions for this repository live in **AGENTS.md** at the repo root.
-Read it before making any change, and keep it as the only copy of these rules.
-`;
-}
-
-export function generateCursorRules(ctx: Ctx): string {
-  const body = joinSections([
-    `**${ctx.name}** — ${ctx.meta.description.trim() || 'TODO: one-paragraph description.'}`,
-    commandsSection(ctx),
-    constraintsSection(ctx),
-    gotchasSection(ctx),
-  ]);
-
-  return `---
-description: Project stack, conventions and known traps for ${ctx.name}
-globs:
-alwaysApply: true
----
-
-${body}
 `;
 }

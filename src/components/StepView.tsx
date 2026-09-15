@@ -3,6 +3,7 @@ import type { Selection, Step } from '@/catalog/types';
 import { t, tx, useLang } from '@/i18n';
 import { availability } from '@/lib/blueprint';
 import { cn } from '@/lib/utils';
+import { Info } from './ui';
 
 interface Props {
   step: Step;
@@ -18,7 +19,10 @@ export function StepView({ step, selection, onToggle }: Props) {
     <section className="space-y-5">
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent">{tx(step.title, lang)}</p>
-        <h2 className="text-xl font-semibold text-ink-100">{tx(step.question, lang)}</h2>
+        <h2 className="flex items-center gap-2 text-xl font-semibold text-ink-100">
+          {tx(step.question, lang)}
+          {step.why ? <Info text={tx(step.why, lang)} /> : null}
+        </h2>
         {step.help ? <p className="text-sm text-ink-400">{tx(step.help, lang)}</p> : null}
         <p className="text-xs text-ink-500">
           {step.options.some((o) => o.locked)
@@ -61,7 +65,10 @@ export function StepView({ step, selection, onToggle }: Props) {
               )}
             >
               <span className="flex items-start justify-between gap-3">
-                <span className="font-medium text-ink-100">{tx(option.label, lang)}</span>
+                <span className="flex items-center gap-1.5 font-medium text-ink-100">
+                  {tx(option.label, lang)}
+                  {option.why ? <Info text={tx(option.why, lang)} /> : null}
+                </span>
                 <span
                   className={cn(
                     'mt-0.5 flex size-5 shrink-0 items-center justify-center border',

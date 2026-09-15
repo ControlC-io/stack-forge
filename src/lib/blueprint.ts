@@ -1,3 +1,4 @@
+import { CUSTOM_SERVER, SERVERS } from '@/catalog/servers';
 import { STEPS, visibleSteps } from '@/catalog/steps';
 import type { Blueprint, ProjectMeta, Selection, Step, TechOption } from '@/catalog/types';
 import { has } from '@/catalog/types';
@@ -7,13 +8,12 @@ export const STORAGE_KEY = 'stack-forge.blueprint.v1';
 
 export const EMPTY_META: ProjectMeta = {
   name: '',
-  slug: '',
   description: '',
   domain: '',
-  httpPort: '80',
   extraContext: '',
-  serverRamGb: '4',
-  serverOtherGb: '0',
+  serverId: SERVERS[0]?.id ?? CUSTOM_SERVER,
+  appSize: 'medium',
+  serverRamGb: '8',
   serverSwap: true,
 };
 
@@ -156,7 +156,9 @@ function prune(sel: Selection): Selection {
       const ids = out[step.id] ?? [];
       next[step.id] = ids.filter((id) => {
         const opt = optionById(id);
-        if (!opt) return false;
+        // An option that moved to another step must not survive under the old
+        // one: its old step may be visible where its new one is not.
+        if (!opt || !step.options.includes(opt)) return false;
         return (opt.requires ?? []).every((req) => has(out, req));
       });
     }

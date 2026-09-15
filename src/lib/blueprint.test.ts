@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STEPS, visibleSteps } from '@/catalog/steps';
+import { STEPS, questionSteps, visibleSteps } from '@/catalog/steps';
 import type { Blueprint, Step } from '@/catalog/types';
 import { applyToggle, availability, emptyBlueprint, normalize, selectedIds } from './blueprint';
 
@@ -12,7 +12,7 @@ const step = (id: string): Step => {
 const ids = (bp: Blueprint) => selectedIds(bp.selection);
 
 describe('selection rules', () => {
-  it('starts with every baseline and recommended option of the visible steps', () => {
+  it('starts with every baseline option of the visible steps', () => {
     const bp = emptyBlueprint();
     for (const s of visibleSteps(bp.selection)) {
       for (const option of s.options) {
@@ -31,38 +31,57 @@ describe('selection rules', () => {
     }
   });
 
+  it('never asks about a baseline step', () => {
+    for (const stack of ['stack-fullstack', 'stack-supabase', 'stack-static']) {
+      const bp = applyToggle(emptyBlueprint(), step('stack'), stack);
+      for (const s of questionSteps(bp.selection)) {
+        expect(s.baseline, `${s.id} is a baseline shown as a question`).toBeFalsy();
+      }
+    }
+  });
+
   it('does not change the selection on the first interaction', () => {
     // A fresh blueprint and a touched one must agree about everything the user
     // did not touch; otherwise the file list moves the moment you click.
     const fresh = emptyBlueprint();
-    const touched = applyToggle(fresh, step('quality'), 'q-conventional');
+    const touched = applyToggle(fresh, step('ui'), 'ui-i18n');
     for (const [stepId, chosen] of Object.entries(fresh.selection)) {
-      if (stepId === 'quality') continue;
+      if (stepId === 'ui') continue;
       expect(touched.selection[stepId], `step "${stepId}" changed on an unrelated click`).toEqual(chosen);
     }
   });
 
   it('refuses to unselect a locked option', () => {
     const bp = emptyBlueprint();
-    const after = applyToggle(bp, step('database'), 'db-postgres-prisma');
+    const after = applyToggle(bp, step('base-api'), 'db-postgres-prisma');
     expect(ids(after).has('db-postgres-prisma')).toBe(true);
   });
 
   it('drops dependent options when their prerequisite goes away', () => {
     let bp = emptyBlueprint();
-    expect(ids(bp).has('feat-uploads')).toBe(true);
-    bp = applyToggle(bp, step('storage'), 'storage-minio');
-    expect(ids(bp).has('storage-minio')).toBe(false);
-    expect(ids(bp).has('feat-uploads'), 'uploads survived without storage').toBe(false);
+    expect(ids(bp).has('rbac-simple')).toBe(true);
+    bp = applyToggle(bp, step('features'), 'auth-better-auth-jwt');
+    expect(ids(bp).has('auth-better-auth-jwt')).toBe(false);
+    expect(ids(bp).has('rbac-simple'), 'roles survived without login').toBe(false);
+  });
+
+  it('drops embeddings when semantic search goes away', () => {
+    let bp = applyToggle(emptyBlueprint(), step('features'), 'db-pgvector');
+    bp = applyToggle(bp, step('features'), 'feat-ai');
+    bp = applyToggle(bp, step('ai-capabilities'), 'ai-embeddings');
+    expect(ids(bp).has('ai-embeddings')).toBe(true);
+    bp = applyToggle(bp, step('features'), 'db-pgvector');
+    expect(ids(bp).has('ai-embeddings'), 'embeddings survived without a vector store').toBe(false);
   });
 
   it('keeps a step the user emptied on purpose empty', () => {
     let bp = emptyBlueprint();
-    bp = applyToggle(bp, step('auth'), 'rbac-simple');
-    bp = applyToggle(bp, step('auth'), 'auth-better-auth-jwt');
-    expect(bp.selection.auth).toEqual([]);
+    for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-minio']) {
+      bp = applyToggle(bp, step('features'), id);
+    }
+    expect(bp.selection.features).toEqual([]);
     // A re-normalisation (what every render does) must not resurrect defaults.
-    expect(normalize(bp).selection.auth).toEqual([]);
+    expect(normalize(bp).selection.features).toEqual([]);
   });
 
   it('seeds a branch revealed later with its own defaults', () => {
@@ -75,16 +94,9 @@ describe('selection rules', () => {
   it('hides the self-hosted steps behind the Supabase branch', () => {
     const bp = applyToggle(emptyBlueprint(), step('stack'), 'stack-supabase');
     const visible = visibleSteps(bp.selection).map((s) => s.id);
-    expect(visible).not.toContain('backend');
-    expect(visible).not.toContain('database');
-    expect(visible).not.toContain('auth');
-    expect(visible).not.toContain('storage');
+    expect(visible).not.toContain('features');
+    expect(visible).not.toContain('base-api');
     expect(visible).toContain('supabase');
-  });
-
-  it('hides the frontend step for an API-only project', () => {
-    const bp = applyToggle(emptyBlueprint(), step('stack'), 'stack-api-only');
-    expect(visibleSteps(bp.selection).map((s) => s.id)).not.toContain('frontend');
   });
 
   it('drops everything server-side for a static project', () => {
@@ -95,19 +107,13 @@ describe('selection rules', () => {
     }
   });
 
-  it('reveals the AI sub-branch only when the module is on', () => {
+  it('asks about AI only when the app needs it', () => {
     const off = emptyBlueprint();
-    expect(visibleSteps(off.selection).map((s) => s.id)).not.toContain('ai-provider');
+    expect(questionSteps(off.selection).map((s) => s.id)).not.toContain('ai-capabilities');
 
-    const on = applyToggle(off, step('backend'), 'feat-ai');
-    expect(visibleSteps(on.selection).map((s) => s.id)).toContain('ai-provider');
-    expect(ids(on).has('ai-openrouter'), 'no default provider').toBe(true);
-  });
-
-  it('keeps exactly one AI provider selected', () => {
-    let bp = applyToggle(emptyBlueprint(), step('backend'), 'feat-ai');
-    bp = applyToggle(bp, step('ai-provider'), 'ai-direct');
-    expect(bp.selection['ai-provider']).toEqual(['ai-direct']);
+    const on = applyToggle(off, step('features'), 'feat-ai');
+    expect(questionSteps(on.selection).map((s) => s.id)).toContain('ai-capabilities');
+    expect(ids(on).has('ai-chat'), 'no default AI use').toBe(true);
   });
 
   it('never leaves a selected option whose prerequisites are unmet', () => {
@@ -144,14 +150,26 @@ describe('selection rules', () => {
     }
   });
 
-  it('survives a stored blueprint that references options the catalog dropped', () => {
+  it('drops an option stored under a step it no longer belongs to', () => {
+    // infra-compose-dev moved from the always-visible deployment baseline to the
+    // API baseline; an old draft of a static project must not keep it.
+    const bp = applyToggle(emptyBlueprint(), step('stack'), 'stack-static');
+    const stale = normalize({
+      ...bp,
+      selection: { ...bp.selection, 'base-infra': ['infra-compose-dev', 'infra-nginx'] },
+    });
+    expect(selectedIds(stale.selection).has('infra-compose-dev')).toBe(false);
+  });
+
+  it('survives a stored blueprint that references options and steps the catalog dropped', () => {
     const stale: Blueprint = {
       ...emptyBlueprint(),
-      selection: { database: ['db-sqlite-prisma'], stack: ['shape-fullstack'] },
-      touched: ['database'],
+      selection: { 'base-api': ['db-sqlite-prisma'], agent: ['agent-cursor'], stack: ['stack-api-only'] },
+      touched: ['base-api', 'agent', 'stack'],
     };
     const fixed = normalize(stale);
-    expect(fixed.selection.database).not.toContain('db-sqlite-prisma');
-    expect(fixed.selection.database).toContain('db-postgres-prisma');
+    expect(fixed.selection['base-api']).not.toContain('db-sqlite-prisma');
+    expect(fixed.selection.agent).toBeUndefined();
+    expect(selectedIds(fixed.selection).has('stack-api-only')).toBe(false);
   });
 });

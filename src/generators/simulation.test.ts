@@ -21,13 +21,12 @@ const step = (id: string): Step => STEPS.find((s) => s.id === id)!;
 
 const META: ProjectMeta = {
   name: 'Folio App',
-  slug: 'folio-app',
   description: 'RAG document intelligence platform.',
   domain: 'folio.example.com',
-  httpPort: '80',
   extraContext: '',
+  serverId: 'controlc-vps',
+  appSize: 'medium',
   serverRamGb: '16',
-  serverOtherGb: '6',
   serverSwap: true,
 };
 
@@ -44,23 +43,18 @@ function simulations(): Sim[] {
 
   add('01 default self-hosted', base);
 
-  // Shape branches, each crossed with both agents.
-  for (const stack of ['stack-supabase', 'stack-static', 'stack-api-only']) {
-    const bp = applyToggle(base, step('stack'), stack);
-    add(`02 ${stack}`, bp);
-    add(`03 ${stack} + both agents`, applyToggle(bp, step('agent'), 'agent-both'));
+  // Shape branches.
+  for (const stack of ['stack-supabase', 'stack-static']) {
+    add(`02 ${stack}`, applyToggle(base, step('stack'), stack));
   }
 
   // The full RAG shape: vector database + embeddings + parsing + uploads.
-  let rag = applyToggle(base, step('database'), 'db-pgvector');
-  rag = applyToggle(rag, step('backend'), 'feat-ai');
+  let rag = applyToggle(base, step('features'), 'db-pgvector');
+  rag = applyToggle(rag, step('features'), 'feat-ai');
   rag = applyToggle(rag, step('ai-capabilities'), 'ai-embeddings');
   rag = applyToggle(rag, step('ai-capabilities'), 'ai-parsing');
   add('04 full RAG', rag);
 
-  // Every AI provider, on top of the RAG shape.
-  add('05 rag + direct sdks', applyToggle(rag, step('ai-provider'), 'ai-direct'));
-  add('06 rag + ollama', applyToggle(rag, step('ai-provider'), 'ai-local'));
 
   // Supabase with everything, and Supabase stripped to the bone.
   let sbFull = applyToggle(base, step('stack'), 'stack-supabase');
@@ -73,31 +67,32 @@ function simulations(): Sim[] {
   for (const id of ['sb-rls', 'sb-auth']) sbBare = applyToggle(sbBare, step('supabase'), id);
   add('08 supabase bare', sbBare);
 
-  // Stripping the self-hosted stack down: no auth, no storage, no extras.
-  let bare = applyToggle(base, step('auth'), 'rbac-simple');
-  bare = applyToggle(bare, step('auth'), 'auth-better-auth-jwt');
-  bare = applyToggle(bare, step('storage'), 'storage-minio');
-  bare = applyToggle(bare, step('quality'), 'q-vitest');
+  // Stripping the self-hosted stack down: no login, no files, no extras.
+  let bare = base;
+  for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-minio']) {
+    bare = applyToggle(bare, step('features'), id);
+  }
   add('09 bare API', bare);
 
-  // Every backend module at once.
+  // Every feature at once.
   let loaded = base;
-  for (const id of ['feat-email', 'feat-jobs', 'feat-swagger', 'feat-public-api', 'feat-ai']) {
-    loaded = applyToggle(loaded, step('backend'), id);
+  for (const id of ['feat-email', 'feat-jobs', 'feat-ai', 'db-pgvector']) {
+    loaded = applyToggle(loaded, step('features'), id);
   }
-  add('10 all backend modules', loaded);
+  add('10 every feature', loaded);
 
-  // Every frontend extra at once.
-  let ui = base;
-  for (const id of ['ui-query', 'ui-sonner', 'ui-i18n', 'ui-charts', 'ui-markdown']) {
-    ui = applyToggle(ui, step('frontend'), id);
+  // Every interface extra at once, on each shape.
+  for (const stack of ['stack-fullstack', 'stack-static']) {
+    // Toggling the already-selected branch would deselect it.
+    let ui = stack === 'stack-fullstack' ? base : applyToggle(base, step('stack'), stack);
+    for (const id of ['ui-i18n', 'ui-charts', 'ui-markdown']) ui = applyToggle(ui, step('ui'), id);
+    add(`11 interface extras (${stack})`, ui);
   }
-  add('11 all frontend extras', ui);
 
-  // Host sizes, including one that cannot fit the stack.
-  add('12 tiny host', { ...base, meta: { ...META, serverRamGb: '2', serverOtherGb: '0', serverSwap: false } });
-  add('13 huge host', { ...base, meta: { ...META, serverRamGb: '64', serverOtherGb: '0' } });
-  add('14 crowded host', { ...base, meta: { ...META, serverRamGb: '8', serverOtherGb: '6' } });
+  // Servers and sizes, including a host that cannot fit the stack.
+  add('12 tiny custom host', { ...base, meta: { ...META, serverId: 'custom', serverRamGb: '2', serverSwap: false } });
+  add('13 huge custom host', { ...base, meta: { ...META, serverId: 'custom', serverRamGb: '64', appSize: 'large' } });
+  add('14 small app', { ...base, meta: { ...META, appSize: 'small' } });
   add('15 empty meta', { ...emptyBlueprint() });
 
   return sims;

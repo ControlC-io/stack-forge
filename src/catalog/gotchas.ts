@@ -103,12 +103,14 @@ If users look logged in but every API call 401s, the JWT is missing → \`localS
 | Client | Endpoint | Used for |
 |---|---|---|
 | \`getClient()\` | \`MINIO_ENDPOINT\` (\`http://minio:9000\`) | bucket ops, server-side up/downloads |
-| \`getSigningClient()\` | \`MINIO_PUBLIC_URL\` (\`http://127.0.0.1:9000\`) | presigned GET URLs for the browser |`,
+| \`getSigningClient()\` | \`MINIO_PUBLIC_URL\` (\`http://127.0.0.1:9000\`) | presigned GET URLs for the browser |
+
+In production the browser cannot reach MinIO at all: it has no domain. Set \`MINIO_PUBLIC_URL\` to the app's own origin (\`https://<domain>\`) and let nginx proxy \`/<bucket>/\` to \`minio:9000\` with \`proxy_set_header Host $host\` — the signed host then matches what the browser sends. Renaming \`MINIO_BUCKET\` means renaming that nginx location too.`,
   },
   {
     id: 'upload-proxy',
     title: 'Proxy uploads through the API, not browser → MinIO',
-    when: ['storage-minio', 'feat-uploads'],
+    when: ['storage-minio'],
     body: `Direct browser → MinIO \`PUT\` fails on Docker Desktop Windows (\`ERR_CONNECTION_RESET\` on large files). Upload through the API instead:
 
 \`\`\`
@@ -127,7 +129,7 @@ Develop against \`http://127.0.0.1\` and list both spellings in \`TRUSTED_ORIGIN
   {
     id: 'vite-allowed-hosts',
     title: 'Vite needs `allowedHosts: true` behind a proxy',
-    when: ['fe-react-vite'],
+    when: ['infra-compose-dev'],
     body: `Vite 5.3+ blocks requests whose \`Host\` header it does not recognise. nginx proxies with the container's service name as the \`Host\` (\`Host: frontend\`), which Vite rejects with a 403 that looks like a routing bug. Set \`server.allowedHosts = true\` in \`vite.config.ts\`.`,
   },
   {
@@ -179,16 +181,10 @@ Coolify builds **on the production server**, next to the running containers: cap
 \`VITE_*\` values are inlined at build time — they are public. Never put a secret in one.`,
   },
   {
-    id: 'swagger-enomem',
-    title: 'swagger-jsdoc ENOMEM on Docker/Windows',
-    when: ['feat-swagger'],
-    body: `\`swaggerJSDoc()\` with glob patterns throws \`ENOMEM: not enough memory, scandir\` when scanning a Windows bind mount. Wrap the call in try/catch — the failure is non-fatal, only \`/api/docs\` is lost.`,
-  },
-  {
     id: 'nginx-single-entry',
     title: 'nginx is the only entrypoint',
     when: ['backend-express'],
-    body: `Browsers talk to nginx only. Backend and database sit on an internal network with no host port bindings in production; the backend port is exposed locally for debugging only.
+    body: `Traefik (Coolify) terminates TLS and routes the domain; it does not serve files. nginx is the one service with a domain: it serves the SPA and proxies \`/api\` (and the storage bucket), so the browser only ever sees one origin — no CORS, same-site cookies. Backend, database and storage get no domain and no published port in production; the backend port is published locally for debugging only.
 
 Keep \`client_max_body_size\` in sync with the API's upload limit, and set \`proxy_read_timeout\` above the slowest endpoint (long LLM or pipeline calls otherwise die at 60s with a 504 that looks like a backend crash).`,
   },

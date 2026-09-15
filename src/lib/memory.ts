@@ -1,3 +1,4 @@
+import { APP_SIZES, serverById } from '@/catalog/servers';
 import type { ProjectMeta, ServiceId } from '@/catalog/types';
 
 /**
@@ -5,19 +6,26 @@ import type { ProjectMeta, ServiceId } from '@/catalog/types';
  *
  * A service that exceeds its own `mem_limit` is OOM-killed (exit 137) even with
  * gigabytes free on the box, so these numbers have to come from the real host
- * size rather than from a template default. Everything here is in MB.
+ * and the share this project may take of it. Everything here is in MB unless
+ * the name says GB.
  */
 export interface MemoryPlan {
+  /** Display name of the host, English. */
+  hostLabel: string;
   totalGb: number;
-  otherGb: number;
-  /** GB left for this stack after the OS and Coolify's own containers. */
+  /** Several projects live on this host. */
+  shared: boolean;
+  /** What the chosen app size asks for. */
+  requestedGb: number;
+  /** What this stack actually gets: the request, capped by the host. */
   availableGb: number;
   limits: Partial<Record<ServiceId, number>>;
   /** V8 heap cap for the API, deliberately below its container limit. */
   nodeHeap: number;
   /** V8 heap cap for the build stages, which run on the production host. */
   buildHeap: number;
-  swap: boolean;
+  /** null: nobody has confirmed whether the host has swap. */
+  swap: boolean | null;
   /** English, rendered into the generated docs. */
   warnings: string[];
 }
@@ -50,9 +58,15 @@ function num(value: string, fallback: number): number {
 }
 
 export function planMemory(meta: ProjectMeta, services: Set<ServiceId>): MemoryPlan {
-  const totalGb = clamp(num(meta.serverRamGb, 4), 1, 256);
-  const otherGb = clamp(num(meta.serverOtherGb, 0), 0, Math.max(0, totalGb - 1));
-  const availableGb = Math.max(0.75, totalGb - otherGb - HOST_RESERVE_GB);
+  const server = serverById(meta.serverId);
+  const totalGb = server ? server.ramGb : clamp(num(meta.serverRamGb, 4), 1, 256);
+  const shared = server?.shared ?? false;
+  const swap = server ? (server.swap ?? null) : meta.serverSwap;
+  const hostLabel = server?.label ?? 'Custom host';
+
+  const requestedGb = (APP_SIZES[meta.appSize] ?? APP_SIZES.medium).gb;
+  const hostFreeGb = Math.max(0.75, totalGb - HOST_RESERVE_GB);
+  const availableGb = Math.min(requestedGb, hostFreeGb);
 
   // Only the services this project actually runs compete for the budget.
   const present = [...services].filter((s) => s !== 'frontend' && WEIGHTS[s] !== undefined);
@@ -72,23 +86,44 @@ export function planMemory(meta: ProjectMeta, services: Set<ServiceId>): MemoryP
 
   const warnings: string[] = [];
   const claimed = Object.values(limits).reduce((a, b) => a + b, 0);
-  if (totalGb - otherGb < 2.5) {
+  if (availableGb < requestedGb) {
     warnings.push(
-      `Only ${(totalGb - otherGb).toFixed(1)} GB is available to this host once other stacks are accounted for. The limits below are ceilings, not reservations — do not raise one without lowering another.`,
+      `The host only has ${hostFreeGb.toFixed(1)} GB left after the OS and Coolify, less than the ${requestedGb} GB this project asked for. The limits below are ceilings, not reservations — do not raise one without lowering another.`,
     );
   }
   if (claimed > availableGb * 1024) {
     warnings.push(
-      'The per-service minimums add up to more than the available memory. Either give the host more RAM or drop a service (MinIO and the email service are the usual candidates).',
+      'The per-service minimums add up to more than the available memory. Either give the project a larger size or drop a service (MinIO and the email service are the usual candidates).',
     );
   }
-  if (!meta.serverSwap) {
+  if (shared) {
+    warnings.push(
+      `${hostLabel} is shared with other Coolify projects. These limits are this project's share, not the machine's: raising them takes memory from a neighbour.`,
+    );
+  }
+  if (swap === false) {
     warnings.push(
       'There is no swap file on this host. Add one (4 GB is plenty) before the first deploy: without it a single spike kills a container instead of slowing it down.',
     );
   }
+  if (swap === null) {
+    warnings.push(
+      'Nobody has confirmed a swap file on this host. Check with `swapon --show` before the first deploy: without swap a single spike kills a container instead of slowing it down.',
+    );
+  }
 
-  return { totalGb, otherGb, availableGb, limits, nodeHeap, buildHeap, swap: meta.serverSwap, warnings };
+  return {
+    hostLabel,
+    totalGb,
+    shared,
+    requestedGb,
+    availableGb,
+    limits,
+    nodeHeap,
+    buildHeap,
+    swap,
+    warnings,
+  };
 }
 
 export function mb(value: number): string {
