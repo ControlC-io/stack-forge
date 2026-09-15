@@ -38,7 +38,8 @@ export function buildContext(bp: Blueprint): Ctx {
   const options = selectedOptions(bp.selection);
   const has = (id: string) => ids.has(id);
 
-  const name = bp.meta.name.trim() || 'Nuevo proyecto';
+  // Generated files are English: this fallback lands in every one of them.
+  const name = bp.meta.name.trim() || 'New project';
   const slug = slugify(bp.meta.name) || 'app';
 
   const services = new Set<ServiceId>();

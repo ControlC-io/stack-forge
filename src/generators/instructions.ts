@@ -86,14 +86,19 @@ function constraintsSection(ctx: Ctx): string {
   const rules: string[] = [];
   if (ctx.has('q-strict-ts')) rules.push('Strict TypeScript — no implicit `any`.');
   if (ctx.has('q-english-code')) rules.push('Code, comments and commits in English.');
-  rules.push('API keys and secrets live exclusively in `.env` — never in the database or the frontend.');
+  rules.push(
+    ctx.hasBackend || ctx.hasSupabase
+      ? 'API keys and secrets live exclusively in `.env` on the server — never in the database or the frontend bundle.'
+      : 'There is no server: nothing secret can live in this app, because everything ships in the public bundle.',
+  );
   if (ctx.has('rbac-simple')) rules.push('The role guard is applied to every business route without exception.');
   if (ctx.hasPostgres) {
     rules.push('Raw SQL: always quote camelCase columns, always `text[]` and never `uuid[]`.');
     rules.push('`$executeRaw` for void-returning functions, `$queryRaw` for result-returning ones.');
   }
-  if (ctx.hasCoolify) {
-    rules.push('Never add a `networks:` block to the Coolify compose file.');
+  // The networks rule is already a gotcha in this same file. The budget rule
+  // only means something when there is more than one container to share it.
+  if (ctx.hasCoolify && ctx.hasBackend) {
     rules.push(
       `Never raise a \`mem_limit\` without lowering another: this project's share of ${ctx.memory.hostLabel} is ${ctx.memory.availableGb.toFixed(1)} GB and the limits already add up to it.`,
     );

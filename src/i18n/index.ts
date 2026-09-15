@@ -199,9 +199,9 @@ const UI = {
     fr: 'fichiers seront générés',
   },
   summaryTraps: {
-    es: 'trampas documentadas',
-    en: 'documented traps',
-    fr: 'pièges documentés',
+    es: 'trampas documentadas en AGENTS.md',
+    en: 'documented traps in AGENTS.md',
+    fr: 'pièges documentés dans AGENTS.md',
   },
 
   resultTitle: {

@@ -51,6 +51,7 @@ function variants(): Array<{ name: string; bp: Blueprint }> {
   });
   out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-minio') });
   out.push({ name: 'email service', bp: applyToggle(base, step('features'), 'feat-email') });
+  out.push({ name: 'team with CI', bp: applyToggle(base, step('team'), 'infra-ci') });
   out.push({ name: 'claude design', bp: applyToggle(base, step('design'), 'design-claude') });
   out.push({ name: 'tiny custom host', bp: withMeta(base, custom('2', { serverSwap: true })) });
 
@@ -148,6 +149,23 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
     expect(byPath('CLAUDE.md')?.contents).toContain('@AGENTS.md');
     // Cursor reads AGENTS.md itself; a rule pointing at it is a third copy.
     expect(byPath('.cursor/rules/project.mdc')).toBeUndefined();
+  });
+
+  it('keeps server-side advice out of AGENTS.md when there is no server', () => {
+    const agents = byPath('AGENTS.md')!.contents;
+    if (!ctx.hasBackend) {
+      // The build-heap cap still applies (the nginx image builds the bundle
+      // with Node); the runtime heap advice does not.
+      expect(agents).not.toContain('max-old-space-size=1280');
+      expect(agents).not.toContain('limits already add up');
+    }
+    if (!ctx.hasDb && !ctx.hasSupabase) expect(agents).not.toMatch(/database/i);
+    // Stated once, as a gotcha, not again as a constraint.
+    expect(agents.split('Never add a `networks:` block').length - 1).toBe(0);
+  });
+
+  it('writes a CI workflow only when the team asked for one', () => {
+    expect(Boolean(byPath('.github/workflows/ci.yml'))).toBe(ctx.has('infra-ci'));
   });
 
   it('runs Docker locally only when there is a stack to run', () => {

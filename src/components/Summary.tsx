@@ -50,18 +50,12 @@ export function Summary({ blueprint }: { blueprint: Blueprint }) {
         ))}
       </div>
 
+      {/* A count, not the list: the titles are agent documentation and do not
+          help anyone answer the questions on screen. */}
       {ctx.gotchas.length ? (
-        <div className="space-y-2">
-          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-400">
-            <AlertTriangle className="size-3.5" /> {ctx.gotchas.length} {t('summaryTraps', lang)}
-          </h3>
-          {/* Gotcha titles stay English: they are the generated documentation. */}
-          <ul className="space-y-1 text-xs text-ink-400">
-            {ctx.gotchas.map((g) => (
-              <li key={g.id}>· {g.title}</li>
-            ))}
-          </ul>
-        </div>
+        <p className="flex items-center gap-1.5 text-xs text-ink-400">
+          <AlertTriangle className="size-3.5" /> {ctx.gotchas.length} {t('summaryTraps', lang)}
+        </p>
       ) : null}
     </aside>
   );

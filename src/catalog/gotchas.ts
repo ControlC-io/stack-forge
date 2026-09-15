@@ -145,7 +145,9 @@ Coolify's docs are explicit: no custom network definitions. Containers still rea
   {
     id: 'coolify-memory',
     title: 'Size `mem_limit` against the cgroup, not the host',
-    when: ['infra-coolify'],
+    // Gated on the API: V8 heaps, upload buffers and database backups mean
+    // nothing to a stack whose only container is nginx.
+    when: ['backend-express'],
     body: `A service that exceeds its own \`mem_limit\` is OOM-killed with **exit 137** even when the host has many GB free. Diagnose with \`dmesg | grep -i oom\` and by distinguishing exit 137 (kernel OOM) from exit 1 (app crash).
 
 For Node services cap the V8 heap **below** the container limit — \`NODE_OPTIONS=--max-old-space-size=1280\` under \`mem_limit: 2g\` — leaving room for off-heap buffers (multipart uploads, base64 re-encoding). Without the cap V8 grows past the cgroup limit and the kernel kills the container instead of letting the GC reclaim.

@@ -74,6 +74,10 @@ function simulations(): Sim[] {
   }
   add('09 bare API', bare);
 
+  // CI on each shape: the workflow must only reference workspaces that exist.
+  add('09b fullstack + CI', applyToggle(base, step('team'), 'infra-ci'));
+  add('09c static + CI', applyToggle(applyToggle(base, step('stack'), 'stack-static'), step('team'), 'infra-ci'));
+
   // Every feature at once.
   let loaded = base;
   for (const id of ['feat-email', 'feat-jobs', 'feat-ai', 'db-pgvector']) {
@@ -324,6 +328,13 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
       for (const pointer of docs.filter((f) => !substantial.includes(f))) {
         expect(pointer.contents, `${pointer.path} should point at the shared file`).toMatch(/AGENTS\.md/);
       }
+    }
+  });
+
+  it('writes no Spanish or French into the generated files', () => {
+    // The UI is translated; the output an agent reads never is.
+    for (const f of files) {
+      expect(f.contents, f.path).not.toMatch(/Nuevo proyecto|[áéíóúñ¿¡àèùçœ]/i);
     }
   });
 
