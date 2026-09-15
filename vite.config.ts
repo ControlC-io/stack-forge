@@ -4,9 +4,11 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  // The site is served from https://controlc-io.github.io/stack-forge/, so the
-  // assets have to be requested from that sub-path and not from the root.
-  base: '/stack-forge/',
+  // Sub-path the bundle is served from. GitHub Pages serves the site under
+  // /stack-forge/ and sets BASE_PATH in its workflow; everywhere else (dev,
+  // Coolify on its own domain) it is the root. A wrong value loads a blank page:
+  // every asset request 404s.
+  base: process.env.BASE_PATH || '/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },

@@ -32,6 +32,9 @@ jobs:
       - run: npm test
 
       - run: npm run build
+        env:
+          # Pages serves the site from https://controlc-io.github.io/stack-forge/.
+          BASE_PATH: /stack-forge/
 
       - uses: actions/upload-pages-artifact@v3
         with:

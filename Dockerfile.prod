@@ -10,6 +10,10 @@ ENV NODE_ENV=development
 # Coolify builds on the production server, next to the running containers. Cap
 # the build heap so the host OOM-killer does not take a neighbour down.
 ENV NODE_OPTIONS=--max-old-space-size=768
+# Served from the root of its own domain. Coolify passes env vars as build ARGs,
+# so setting BASE_PATH in its UI is enough to serve it from a sub-path instead.
+ARG BASE_PATH=/
+ENV BASE_PATH=${BASE_PATH}
 COPY package*.json ./
 RUN --mount=type=cache,id=npm-stack-forge,target=/root/.npm npm install --no-audit --no-fund
 COPY . .
