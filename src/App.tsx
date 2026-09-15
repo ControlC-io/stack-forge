@@ -119,7 +119,7 @@ export default function App() {
     <LanguageContext.Provider value={lang}>
       <div className="flex min-h-full flex-col">
         <header className="sticky top-0 z-10 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
-          <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-5">
+          <div className="flex h-14 w-full items-center justify-between gap-4 px-5 lg:px-8">
             <div className="flex min-w-0 items-center gap-4">
               <Wordmark />
               <span className="hidden border-l border-ink-700 pl-4 text-sm text-ink-500 md:inline">
@@ -175,7 +175,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 gap-8 px-5 py-8">
+        <div className="flex w-full flex-1 gap-8 px-5 py-8 lg:px-8 2xl:gap-12">
           <nav className="hidden w-44 shrink-0 lg:block">
             <ol className="sticky top-24 space-y-0.5">
               {screens.map((s, i) => (
@@ -247,7 +247,7 @@ export default function App() {
             </div>
           </main>
 
-          <div className="hidden w-64 shrink-0 xl:block">
+          <div className="hidden w-72 shrink-0 xl:block 2xl:w-80">
             <div className="sticky top-24">
               <Summary blueprint={blueprint} />
             </div>

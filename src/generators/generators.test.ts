@@ -251,6 +251,13 @@ describe('prompt quality', () => {
     expect(words, 'the prompt is getting too long to be read').toBeLessThan(6000);
   });
 
+  it('accepts a pasted URL as the domain without doubling the scheme', () => {
+    for (const domain of ['https://vitals.controlc.io/', 'http://vitals.controlc.io/app', ' vitals.controlc.io ']) {
+      const env = generateFiles(withMeta(emptyBlueprint(), { domain })).find((f) => f.path === '.env.example')!;
+      expect(env.contents, domain).toContain('PUBLIC_URL=https://vitals.controlc.io\n');
+    }
+  });
+
   it('describes the Supabase architecture instead of the self-hosted one', () => {
     const sb = applyToggle(bp, step('stack'), 'stack-supabase');
     const text = generateFiles(sb)[0]!.contents;

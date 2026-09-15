@@ -22,7 +22,10 @@ export function generateEnvExample(ctx: Ctx): string {
     );
   }
 
-  if (ctx.meta.domain.trim()) lines.push(`PUBLIC_URL=https://${ctx.meta.domain.trim()}`);
+  // People paste a URL as often as a bare host: keep only the host, or the
+  // output reads https://https://example.com/.
+  const host = ctx.meta.domain.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  if (host) lines.push(`PUBLIC_URL=https://${host}`);
   lines.push('');
 
   for (const v of ctx.env) {
