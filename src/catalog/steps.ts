@@ -131,8 +131,8 @@ export const STEPS: Step[] = [
         deps: { backend: ['better-auth', 'jsonwebtoken'], frontend: ['better-auth'] },
         env: [
           { key: 'BETTER_AUTH_SECRET', secret: true },
-          { key: 'BETTER_AUTH_URL', value: 'http://127.0.0.1' },
-          { key: 'TRUSTED_ORIGINS', value: 'http://localhost,http://127.0.0.1' },
+          { key: 'BETTER_AUTH_URL', value: 'http://127.0.0.1:5173', comment: 'the origin the browser uses — in production https://<your domain>' },
+          { key: 'TRUSTED_ORIGINS', value: 'http://localhost:5173,http://127.0.0.1:5173', comment: 'in production https://<your domain>' },
           { key: 'JWT_SECRET', secret: true },
           { key: 'JWT_EXPIRES_IN', value: '8h' },
         ],
@@ -279,6 +279,58 @@ export const STEPS: Step[] = [
         env: [{ key: 'MAX_CONCURRENT_JOBS', value: '2' }],
         notes: [
           'The concurrency cap exists to protect container memory: raising it is the fastest route back to OOM kills.',
+        ],
+      },
+      {
+        id: 'feat-browser-worker',
+        label: L('Navegador automatizado (Playwright)', 'Automated browser (Playwright)', 'Navigateur automatisé (Playwright)'),
+        description: L(
+          'Scraping, capturas o recorridos web en un contenedor worker aparte.',
+          'Scraping, screenshots or scripted web journeys in a separate worker container.',
+          'Scraping, captures ou parcours web scriptés dans un conteneur worker séparé.',
+        ),
+        why: L(
+          'Chromium consume mucha memoria y se cae con la configuración por defecto de Docker. Va en su propio contenedor para que un navegador colgado no tumbe la API, como en vitals o pmp-scrapper. Elige el tamaño grande en el servidor.',
+          'Chromium is memory-hungry and crashes on Docker defaults. It runs in its own container so a stuck browser never takes the API down, as in vitals or pmp-scrapper. Pick the large size on the server screen.',
+          'Chromium est gourmand en mémoire et plante avec les réglages Docker par défaut. Il tourne dans son propre conteneur pour qu’un navigateur bloqué ne fasse pas tomber l’API, comme dans vitals ou pmp-scrapper. Choisissez la grande taille à l’écran serveur.',
+        ),
+        spec: 'A Playwright worker in its own container with no HTTP surface; the API never launches a browser',
+        services: ['worker'],
+        deps: {
+          worker: ['playwright@1.62.1', '@prisma/client@6'],
+          workerDev: ['typescript', '@types/node', 'prisma@6'],
+        },
+        env: [
+          { key: 'PLAYWRIGHT_VERSION', value: '1.62.1', comment: 'must equal the playwright version in worker/package.json' },
+          { key: 'WORKER_CONCURRENCY', value: '1' },
+        ],
+        gotchas: ['playwright-shm', 'playwright-memory', 'playwright-version-match', 'worker-no-overlap'],
+        tasks: [
+          'Create `worker/` as its own Node service that generates its Prisma client from `backend/prisma/schema.prisma`: it owns every Playwright import, and the API only records work for it in the database.',
+          'Have the worker touch `/tmp/worker-heartbeat` on every loop; its healthcheck fails once the file is older than 60 seconds.',
+        ],
+      },
+      {
+        id: 'feat-cron',
+        label: L('Tareas programadas', 'Scheduled tasks', 'Tâches planifiées'),
+        description: L(
+          'Procesos que se ejecutan solos cada noche o cada pocos minutos (node-cron).',
+          'Jobs that run on their own every night or every few minutes (node-cron).',
+          'Traitements qui tournent seuls chaque nuit ou toutes les quelques minutes (node-cron).',
+        ),
+        why: L(
+          'Cada tarea queda detrás de CRON_ENABLED para que tu entorno local y los de prueba nunca ejecuten los trabajos de producción, como hace pmp-scrapper con su scraping nocturno.',
+          'Every schedule sits behind CRON_ENABLED so local and preview stacks never run production jobs, the way pmp-scrapper gates its nightly scrape.',
+          'Chaque tâche est derrière CRON_ENABLED pour que les environnements locaux et de test n’exécutent jamais les travaux de production, comme pmp-scrapper pour son scraping nocturne.',
+        ),
+        spec: 'Scheduled tasks with node-cron, every schedule gated by CRON_ENABLED',
+        deps: { backend: ['node-cron'] },
+        env: [{ key: 'CRON_ENABLED', value: 'false', comment: 'true only on the production resource in Coolify' }],
+        notes: [
+          'Schedules run in the container timezone, which is UTC, unless each node-cron job is given an explicit `timezone`.',
+        ],
+        tasks: [
+          'Register every schedule in one module, skip registration entirely when `CRON_ENABLED` is not `true`, and log each run with its start, end and outcome.',
         ],
       },
     ],
@@ -632,12 +684,12 @@ export const STEPS: Step[] = [
     options: [
       {
         id: 'fe-react-vite',
-        label: 'React 19 + Vite 5',
+        label: 'React 19 + Vite',
         description: L('SPA con react-router-dom.', 'SPA with react-router-dom.', 'SPA avec react-router-dom.'),
-        spec: 'React 19 + Vite 5 SPA with react-router-dom v6',
+        spec: 'React 19 + Vite SPA with React Router 7 (the `react-router` package, library mode)',
         locked: true,
         deps: {
-          frontend: ['react', 'react-dom', 'react-router-dom'],
+          frontend: ['react', 'react-dom', 'react-router'],
           frontendDev: ['vite', '@vitejs/plugin-react', 'typescript', '@types/react', '@types/react-dom'],
         },
         tasks: [
@@ -694,9 +746,12 @@ export const STEPS: Step[] = [
     options: [
       {
         id: 'backend-express',
-        label: 'Express 4 + TypeScript',
+        label: 'Express 5 + TypeScript',
         description: L('API propia.', 'Own API.', 'API propre.'),
-        spec: 'Express 4 + TypeScript API (ts-node-dev in dev, compiled to dist/ in prod)',
+        spec: 'Express 5 + TypeScript API (ts-node-dev in dev, compiled to dist/ in prod)',
+        notes: [
+          'Express 5 forwards a rejected promise from an async handler to the error handler on its own: no wrapper is needed. Wildcard routes need a name (`/*splat`), a bare `*` no longer matches.',
+        ],
         locked: true,
         services: ['backend'],
         deps: {
@@ -706,7 +761,16 @@ export const STEPS: Step[] = [
         env: [{ key: 'PORT', value: '3000' }],
         // coolify-memory rides here, not on Coolify: V8 heaps, upload buffers and
         // database backups mean nothing to a stack whose only container is nginx.
-        gotchas: ['ts-node-dev-windows', 'coolify-healthcheck', 'nginx-single-entry', 'coolify-memory'],
+        // The networks and log-rotation rules are about the compose file, which
+        // only a stack with an API has.
+        gotchas: [
+          'ts-node-dev-windows',
+          'coolify-healthcheck',
+          'nginx-single-entry',
+          'coolify-memory',
+          'coolify-no-networks',
+          'coolify-logging',
+        ],
         tasks: [
           'Build the API: one router per domain under `src/routes/`, zod validation at the edge, one centralised error handler.',
           'Expose `/api/health/live` (no database access) and `/api/health/ready` (checks dependencies).',
@@ -717,10 +781,12 @@ export const STEPS: Step[] = [
         id: 'db-postgres-prisma',
         label: 'PostgreSQL 16 + Prisma',
         description: L('Base de datos.', 'Database.', 'Base de données.'),
-        spec: 'PostgreSQL 16 with Prisma (schema changes applied with `prisma db push`)',
+        spec: 'PostgreSQL 16 with Prisma 6 (schema changes applied with `prisma db push`)',
         locked: true,
         services: ['postgres'],
-        deps: { backend: ['@prisma/client'], backendDev: ['prisma'] },
+        // Pinned to the major the other ControlC projects run. Prisma 7 changes
+        // how the client is configured and generated: upgrading is a decision.
+        deps: { backend: ['@prisma/client@6'], backendDev: ['prisma@6'] },
         env: [
           { key: 'POSTGRES_USER', value: 'postgres' },
           { key: 'POSTGRES_PASSWORD', secret: true },
@@ -741,7 +807,7 @@ export const STEPS: Step[] = [
         description: L('Stack local.', 'Local stack.', 'Stack local.'),
         spec: 'Local docker compose stack with bind mounts and hot reload',
         locked: true,
-        gotchas: ['compose-project-name', 'windows-127001', 'vite-allowed-hosts'],
+        gotchas: ['compose-project-name', 'windows-127001'],
       },
     ],
   },
@@ -798,10 +864,9 @@ export const STEPS: Step[] = [
         locked: true,
         // coolify-healthcheck rides on the API option instead: a stack whose
         // only container is nginx has no startup sequence to get wrong.
-        gotchas: ['coolify-no-networks', 'coolify-logging', 'coolify-build-args'],
-        tasks: [
-          'Deploy on Coolify: point the resource at `docker-compose.coolify.yml`, set the domain on the nginx service, and paste the env vars into the UI.',
-        ],
+        // The deploy step itself is written by the plan: a stack with an API
+        // ships a compose file, a static one a single Dockerfile.
+        gotchas: ['coolify-build-args'],
       },
     ],
   },
@@ -839,9 +904,9 @@ export const STEPS: Step[] = [
       },
       {
         id: 'q-eslint',
-        label: 'ESLint 9',
+        label: 'ESLint',
         description: L('Flat config, cero warnings.', 'Flat config, zero warnings.', 'Flat config, zéro avertissement.'),
-        spec: 'ESLint 9 (flat config) with typescript-eslint, zero warnings allowed',
+        spec: 'ESLint (flat config) with typescript-eslint, zero warnings allowed',
         locked: true,
         deps: { frontendDev: ['eslint', '@eslint/js', 'typescript-eslint'] },
       },

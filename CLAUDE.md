@@ -5,9 +5,12 @@ Guidance for Claude Code when working on this repository.
 ## Project overview
 
 **ControlC Stack Forge** — a static React SPA that generates bootstrap material for new
-repositories: a prompt for Claude Code / Cursor, the agent instruction files
-(`CLAUDE.md`, `.cursor/rules/project.mdc`, `AGENTS.md`), and the matching Docker,
-nginx and Coolify configuration.
+repositories: a prompt for Claude Code / Cursor, the agent instructions (`AGENTS.md`,
+which Cursor reads directly and `CLAUDE.md` imports), and the matching Docker, nginx
+and Coolify configuration.
+
+Production is GitHub Pages: every push to `main` runs the tests, builds with
+`BASE_PATH=/stack-forge/` and publishes. Anywhere else the bundle builds for `/`.
 
 No backend, no database, no auth. State lives in `localStorage` under
 `stack-forge.blueprint.v1`.
@@ -16,6 +19,7 @@ No backend, no database, no auth. State lives in `localStorage` under
 
 ```bash
 npm run dev        # Vite on 5173
+npm test           # catalog, selection rules, simulations, docker compose config
 npm run build      # tsc + vite build
 npm run typecheck  # tsc --noEmit
 ```
@@ -26,10 +30,13 @@ npm run typecheck  # tsc --noEmit
 src/
   catalog/     data only — the decision tree and the gotcha library
     types.ts     TechOption / Step / Blueprint, plus has()/hasAny()
-    steps.ts     STEPS: the ordered decision tree
+    steps.ts     STEPS: question steps plus hidden baseline steps
     gotchas.ts   GOTCHAS: production traps, gated by option id
+    servers.ts   known Coolify hosts and the app sizes
   lib/
     blueprint.ts selection state, defaults, requires/conflicts, pruning
+    memory.ts    host + app size -> every mem_limit and V8 heap cap
+    quickstart.ts the "what to do now" list on the result screen
     download.ts  clipboard, single-file download, zip (fflate)
   generators/  pure functions Blueprint -> GeneratedFile[]
     context.ts   derives everything the emitters need, once

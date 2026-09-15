@@ -15,7 +15,14 @@ export interface Ctx {
   services: Set<ServiceId>;
   env: EnvVar[];
   gotchas: Gotcha[];
-  deps: { frontend: string[]; frontendDev: string[]; backend: string[]; backendDev: string[] };
+  deps: {
+    frontend: string[];
+    frontendDev: string[];
+    backend: string[];
+    backendDev: string[];
+    worker: string[];
+    workerDev: string[];
+  };
   memory: MemoryPlan;
   has: (id: string) => boolean;
   hasFrontend: boolean;
@@ -81,6 +88,8 @@ export function buildContext(bp: Blueprint): Ctx {
       frontendDev: hasFrontend ? uniq(options.flatMap((o) => o.deps?.frontendDev ?? [])) : [],
       backend: hasBackend ? uniq(options.flatMap((o) => o.deps?.backend ?? [])) : [],
       backendDev: hasBackend ? uniq(options.flatMap((o) => o.deps?.backendDev ?? [])) : [],
+      worker: services.has('worker') ? uniq(options.flatMap((o) => o.deps?.worker ?? [])) : [],
+      workerDev: services.has('worker') ? uniq(options.flatMap((o) => o.deps?.workerDev ?? [])) : [],
     },
     memory: planMemory(bp.meta, services),
     has,

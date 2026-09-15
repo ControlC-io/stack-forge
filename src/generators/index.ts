@@ -12,6 +12,7 @@ import {
   generateEnvExample,
   generateNginxConf,
   generateNginxDockerfileProd,
+  generateWorkerDockerfile,
 } from './infra';
 import { generatePrompt } from './prompt';
 
@@ -36,7 +37,8 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
   if (ctx.hasComposeDev) {
     files.push({ path: 'docker-compose.yml', language: 'yaml', contents: generateComposeDev(ctx) });
   }
-  if (ctx.hasCoolify) {
+
+  if (ctx.hasCoolify && ctx.hasBackend) {
     files.push({
       path: 'docker-compose.coolify.yml',
       language: 'yaml',
@@ -45,17 +47,20 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
     files.push({
       path: 'nginx/Dockerfile.prod',
       language: 'dockerfile',
-      contents: generateNginxDockerfileProd(ctx),
+      contents: generateNginxDockerfileProd(ctx, 'nginx/nginx.coolify.conf'),
     });
+    files.push({ path: 'nginx/nginx.coolify.conf', language: 'nginx', contents: generateNginxConf(ctx) });
+  } else if (ctx.hasCoolify) {
+    // One container needs no compose file: Coolify's Dockerfile resource builds
+    // the root Dockerfile by default, which leaves nothing to configure.
     files.push({
-      path: 'nginx/nginx.coolify.conf',
-      language: 'nginx',
-      contents: generateNginxConf(ctx, 'prod'),
+      path: 'Dockerfile',
+      language: 'dockerfile',
+      contents: generateNginxDockerfileProd(ctx, 'nginx.conf'),
     });
+    files.push({ path: 'nginx.conf', language: 'nginx', contents: generateNginxConf(ctx) });
   }
-  if (ctx.hasNginx && ctx.hasComposeDev) {
-    files.push({ path: 'nginx/nginx.conf', language: 'nginx', contents: generateNginxConf(ctx, 'dev') });
-  }
+
   if (ctx.hasBackend) {
     if (ctx.hasComposeDev) {
       files.push({
@@ -92,6 +97,14 @@ export function generateFiles(bp: Blueprint): GeneratedFile[] {
         contents: generateEmailDockerfile('prod'),
       });
     }
+  }
+  if (ctx.services.has('worker')) {
+    // Both compose files build this one image: a browser worker has no dev mode.
+    files.push({
+      path: 'worker/Dockerfile.prod',
+      language: 'dockerfile',
+      contents: generateWorkerDockerfile(ctx),
+    });
   }
   if (ctx.has('infra-ci')) {
     files.push({ path: '.github/workflows/ci.yml', language: 'yaml', contents: generateCi(ctx) });

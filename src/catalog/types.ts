@@ -26,13 +26,16 @@ export type ServiceId =
   | 'nginx'
   | 'backend'
   | 'frontend'
-  | 'email_service';
+  | 'email_service'
+  | 'worker';
 
 export interface PackageDeps {
   frontend?: string[];
   frontendDev?: string[];
   backend?: string[];
   backendDev?: string[];
+  worker?: string[];
+  workerDev?: string[];
 }
 
 export interface TechOption {

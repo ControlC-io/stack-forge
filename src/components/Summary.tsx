@@ -18,8 +18,10 @@ export function Summary({ blueprint }: { blueprint: Blueprint }) {
           {t('summarySelection', lang)}
         </h3>
         <div className="flex flex-wrap gap-1.5">
-          {ctx.options.length ? (
-            ctx.options.map((o) => <Chip key={o.id}>{tx(o.label, lang)}</Chip>)
+          {/* Answers only: the locked baseline is the same for every project and
+              buried the few choices that were actually made. */}
+          {ctx.options.some((o) => !o.locked) ? (
+            ctx.options.filter((o) => !o.locked).map((o) => <Chip key={o.id}>{tx(o.label, lang)}</Chip>)
           ) : (
             <p className="text-ink-500">{t('summaryEmpty', lang)}</p>
           )}

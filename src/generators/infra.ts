@@ -1,6 +1,15 @@
 import { mb } from '@/lib/memory';
 import type { Ctx } from './context';
 
+// Pinned on purpose: `latest` moves without notice, and MinIO stripped the admin
+// console out of its community builds shortly after this release.
+const MINIO_IMAGE = 'minio/minio:RELEASE.2025-04-22T22-12-26Z';
+
+/** One Playwright version for the npm package, the image tag and the build arg. */
+function playwrightVersion(ctx: Ctx): string {
+  return ctx.env.find((v) => v.key === 'PLAYWRIGHT_VERSION')?.value ?? '';
+}
+
 /* ------------------------------------------------------------------ env --- */
 
 export function generateEnvExample(ctx: Ctx): string {
@@ -10,15 +19,12 @@ export function generateEnvExample(ctx: Ctx): string {
     '',
   ];
 
-  // Both only mean something to the local Docker stack.
+  // Only the local Docker stack reads it.
   if (ctx.hasComposeDev) {
     lines.push(
       `COMPOSE_PROJECT_NAME=${ctx.slug}`,
       `# ⚠️ Changing COMPOSE_PROJECT_NAME orphans the existing volumes (data is not`,
       `# deleted, it just stops being mounted). Pick it once.`,
-      '',
-      `# Local only — Traefik owns 80/443 in production.`,
-      `HTTP_PORT=80`,
     );
   }
 
@@ -69,7 +75,7 @@ export function generateComposeDev(ctx: Ctx): string {
 
   if (ctx.services.has('minio')) {
     services.push(`  minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE}
     container_name: \${COMPOSE_PROJECT_NAME}_minio
     restart: unless-stopped
     environment:
@@ -99,7 +105,7 @@ export function generateComposeDev(ctx: Ctx): string {
     restart: unless-stopped
     env_file: .env
     ports:
-      # Host binding for debugging only — real traffic goes through nginx.
+      # Host binding for debugging only — the browser goes through Vite's proxy.
       - "\${BACKEND_PORT:-3000}:3000"
     volumes:
       - ./backend:/app
@@ -119,26 +125,34 @@ export function generateComposeDev(ctx: Ctx): string {
       - /app/node_modules`);
   }
 
+  if (ctx.services.has('worker')) {
+    services.push(`  worker:
+    # Built exactly like production — there is no hot reload for a browser
+    # worker: \`docker compose up -d --build worker\` after a change.
+    build:
+      context: .
+      dockerfile: worker/Dockerfile.prod
+      args:
+        PLAYWRIGHT_VERSION: \${PLAYWRIGHT_VERSION:-${playwrightVersion(ctx)}}
+    container_name: \${COMPOSE_PROJECT_NAME}_worker
+    restart: unless-stopped
+    env_file: .env
+    # Chromium crashes on Docker's default 64 MB /dev/shm.
+    shm_size: 512m${ctx.hasPostgres ? '\n    depends_on:\n      postgres:\n        condition: service_healthy' : ''}`);
+  }
+
   if (ctx.hasFrontend) {
     services.push(`  frontend:
     build: ./frontend
     container_name: \${COMPOSE_PROJECT_NAME}_frontend
     restart: unless-stopped
+    ports:
+      # The one port you open in the browser. Vite proxies /api to the backend,
+      # so the browser sees a single origin, as it does behind nginx in production.
+      - "\${FRONTEND_PORT:-5173}:5173"
     volumes:
       - ./frontend:/app
-      - /app/node_modules`);
-  }
-
-  if (ctx.hasNginx) {
-    services.push(`  nginx:
-    image: nginx:alpine
-    container_name: \${COMPOSE_PROJECT_NAME}_nginx
-    restart: unless-stopped
-    ports:
-      - "\${HTTP_PORT:-80}:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:${ctx.hasFrontend ? '\n      - frontend' : ''}${ctx.hasBackend ? '\n      - backend' : ''}`);
+      - /app/node_modules${ctx.hasBackend ? '\n    depends_on:\n      - backend' : ''}`);
   }
 
   const volumes: string[] = [];
@@ -148,11 +162,11 @@ export function generateComposeDev(ctx: Ctx): string {
   return `# Local development. Bind mounts + dev servers.
 # Production lives in docker-compose.coolify.yml — do not mix them.
 #
-# On Windows use http://127.0.0.1, not http://localhost (WSL2 resolves localhost
-# to ::1 while Docker binds 0.0.0.0).
+# Open http://127.0.0.1:5173. On Windows avoid http://localhost: WSL2 resolves it
+# to ::1 while Docker binds 0.0.0.0.
 #
-# No custom networks, same as production: every service shares the default
-# network and reaches the others by name.
+# No nginx here: Vite serves the UI and proxies /api. No custom networks either,
+# same as production — every service reaches the others by name.
 
 services:
 ${services.join('\n\n')}
@@ -163,7 +177,7 @@ ${volumes.length ? '\nvolumes:\n' + volumes.join('\n') + '\n' : ''}`;
 
 export function generateComposeCoolify(ctx: Ctx): string {
   const services: string[] = [];
-  const { limits, nodeHeap, hostLabel, totalGb, shared, availableGb, warnings } = ctx.memory;
+  const { limits, nodeHeap, workerHeap, hostLabel, totalGb, shared, availableGb, warnings } = ctx.memory;
   const limitOf = (id: keyof typeof limits, fallback: number) => mb(limits[id] ?? fallback);
 
   if (ctx.hasPostgres) {
@@ -194,7 +208,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
 
   if (ctx.services.has('minio')) {
     services.push(`  minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE}
     container_name: ${ctx.slug}_minio
     restart: unless-stopped
     environment:
@@ -263,6 +277,37 @@ export function generateComposeCoolify(ctx: Ctx): string {
       start_period: 30s`);
   }
 
+  if (ctx.services.has('worker')) {
+    services.push(`  worker:
+    build:
+      # Repository root: the worker generates its Prisma client from backend/prisma.
+      context: .
+      dockerfile: worker/Dockerfile.prod
+      args:
+        PLAYWRIGHT_VERSION: \${PLAYWRIGHT_VERSION:-${playwrightVersion(ctx)}}
+    container_name: ${ctx.slug}_worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Chromium's memory lives OUTSIDE this heap, so the gap to mem_limit is
+      # deliberately wider than the API's.
+      NODE_OPTIONS: --max-old-space-size=${workerHeap}
+    env_file: .env
+    logging: *default-logging
+    mem_limit: ${limitOf('worker', 1024)}
+    # Docker's default 64 MB /dev/shm crashes Chromium on large pages.
+    shm_size: 512m
+    # Give an in-flight browser run time to finish and close its context.
+    stop_grace_period: 60s
+    # No HTTP surface: the worker touches a heartbeat file on every loop.
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/worker-heartbeat && test $$(( $$(date +%s) - $$(stat -c %Y /tmp/worker-heartbeat) )) -lt 60"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s${ctx.hasPostgres ? '\n    depends_on:\n      postgres:\n        condition: service_healthy' : ''}`);
+  }
+
   services.push(`  nginx:
     build:
       context: .
@@ -280,16 +325,12 @@ export function generateComposeCoolify(ctx: Ctx): string {
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s${
-        ctx.hasBackend
-          ? `
+      start_period: 10s
     # service_healthy, not service_started: Traefik routes to nginx the moment
     # it is up, so starting it before the API is ready serves 502s on redeploy.
     depends_on:
       backend:
-        condition: service_healthy`
-          : ''
-      }`);
+        condition: service_healthy`);
 
   const volumes: string[] = [];
   if (ctx.hasPostgres) volumes.push('  postgres_data:');
@@ -303,17 +344,13 @@ export function generateComposeCoolify(ctx: Ctx): string {
 # Traefik then picks one non-deterministically and half of the container
 # recreations end in permanent 504s. Containers still reach each other by their
 # service name, exactly as they would on a network you declared yourself.
-#${
-    ctx.hasComposeDev
-      ? `
+#
 # Differences from docker-compose.yml (local dev):
 #   - compiled artefacts, no dev servers, no source bind mounts
 #   - config baked into images (Coolify cannot see repo files at runtime)
-#   - the frontend is a static bundle served by nginx, not its own container
+#   - nginx serves the static bundle and proxies /api; locally Vite does both
 #   - no host port bindings; nginx uses \`expose\`
-#`
-      : ''
-  }
+#
 # MEMORY BUDGET — host: ${hostLabel}, ${totalGb} GB total${shared ? ', shared with other projects' : ''}.
 # This stack's share: ~${availableGb.toFixed(1)} GB.
 # The limits below are ceilings, not reservations: a service that exceeds ITS OWN
@@ -422,6 +459,43 @@ CMD ["node", "dist/index.js"]
 `;
 }
 
+/** The Playwright worker, used by both compose files. */
+export function generateWorkerDockerfile(ctx: Ctx): string {
+  return `# syntax=docker/dockerfile:1.7
+# Build context is the REPOSITORY ROOT: the worker generates its Prisma client
+# from backend/prisma/schema.prisma.
+#
+# The playwright npm package and the browsers baked into this image must be the
+# same version. Never install browsers at container start.
+ARG PLAYWRIGHT_VERSION=${playwrightVersion(ctx)}
+
+# ---- builder ----
+FROM mcr.microsoft.com/playwright:v\${PLAYWRIGHT_VERSION}-noble AS builder
+WORKDIR /app
+# Coolify injects env vars as build ARGs. A buildtime NODE_ENV=production would
+# make npm skip devDependencies, so tsc would not exist — force it here.
+ENV NODE_ENV=development
+ENV NODE_OPTIONS=--max-old-space-size=${ctx.memory.buildHeap}
+COPY worker/package*.json ./
+RUN --mount=type=cache,id=npm-worker,target=/root/.npm npm ci --no-audit --no-fund
+COPY backend/prisma ./prisma
+RUN npx prisma generate --schema=./prisma/schema.prisma
+COPY worker/ ./
+RUN npm run build
+
+# ---- runtime ----
+FROM mcr.microsoft.com/playwright:v\${PLAYWRIGHT_VERSION}-noble AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY worker/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+# No published port and no HTTP surface: the healthcheck reads a heartbeat file.
+CMD ["node", "dist/index.js"]
+`;
+}
+
 export function generateEntrypoint(ctx: Ctx): string {
   const push = ctx.hasDb
     ? `
@@ -438,12 +512,18 @@ exec node dist/index.js
 `;
 }
 
-export function generateNginxDockerfileProd(ctx: Ctx): string {
+/**
+ * The image that builds the SPA and serves it. `conf` is where its nginx config
+ * lives: `nginx/nginx.coolify.conf` beside a compose file, `nginx.conf` for a
+ * static project deployed as a single Dockerfile.
+ */
+export function generateNginxDockerfileProd(ctx: Ctx, conf: string): string {
   const feStage = ctx.hasFrontend
     ? `# ---- frontend build ----
 FROM node:24-alpine AS frontend
 WORKDIR /app
-# Same reason as the backend image: Coolify may inject NODE_ENV=production.
+# Coolify injects env vars as build ARGs; NODE_ENV=production would skip the
+# devDependencies (vite, typescript) this stage needs.
 ENV NODE_ENV=development
 ENV NODE_OPTIONS=--max-old-space-size=${ctx.memory.buildHeap}
 COPY frontend/package*.json ./
@@ -458,31 +538,22 @@ RUN npm run build
   return `# syntax=docker/dockerfile:1.7
 ${feStage}# ---- runtime ----
 FROM nginx:alpine
-${copy}COPY nginx/nginx.coolify.conf /etc/nginx/nginx.conf
+${copy}COPY ${conf} /etc/nginx/nginx.conf
 EXPOSE 80
 `;
 }
 
-export function generateNginxConf(ctx: Ctx, mode: 'dev' | 'prod'): string {
-  // With no UI there is nothing to serve at `/` — say so instead of proxying to
-  // a container that does not exist.
+export function generateNginxConf(ctx: Ctx): string {
+  // With no UI there is nothing to serve at `/` — say so instead of pretending.
   const root = !ctx.hasFrontend
     ? `    location / {
       return 404;   # this project has no user interface
     }`
-    : mode === 'prod'
-      ? `    root /usr/share/nginx/html;
+    : `    root /usr/share/nginx/html;
     index index.html;
 
     location / {
       try_files $uri $uri/ /index.html;   # SPA fallback
-    }`
-      : `    location / {
-      proxy_pass http://frontend:5173;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;   # Vite HMR websocket
-      proxy_set_header Connection "upgrade";
-      proxy_set_header Host $host;
     }`;
 
   const api = ctx.hasBackend
@@ -529,11 +600,15 @@ http {
   default_type  application/octet-stream;
   sendfile      on;
   keepalive_timeout 65;
-
+${
+    ctx.hasBackend
+      ? `
   # Keep this in sync with the API's upload limit — a mismatch produces an
   # opaque 413 with no log on the application side.
   client_max_body_size 60m;
-
+`
+      : ''
+  }
   gzip on;
   gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
 
@@ -555,38 +630,33 @@ ${root}
 /* ------------------------------------------------------------ extras --- */
 
 export function generateCi(ctx: Ctx): string {
+  const job = (name: string, dir: string, runs: string[]) => `  ${name}:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${dir}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${dir}/package-lock.json
+${runs.map((r) => `      - run: ${r}`).join('\n')}`;
+
   const jobs: string[] = [];
-  if (ctx.hasFrontend) {
-    jobs.push(`  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build`);
-  }
+  if (ctx.hasFrontend) jobs.push(job('frontend', 'frontend', ['npm ci', 'npm run build']));
   if (ctx.hasBackend) {
-    jobs.push(`  backend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: npm run build${ctx.has('q-vitest') ? '\n      - run: npm test' : ''}`);
+    jobs.push(job('backend', 'backend', ['npm ci', 'npm run build', ...(ctx.has('q-vitest') ? ['npm test'] : [])]));
+  }
+  if (ctx.services.has('worker')) {
+    jobs.push(
+      job('worker', 'worker', [
+        'npm ci',
+        'npx prisma generate --schema=../backend/prisma/schema.prisma',
+        'npm run build',
+      ]),
+    );
   }
   return `name: CI
 

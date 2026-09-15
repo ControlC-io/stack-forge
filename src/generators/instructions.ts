@@ -10,7 +10,9 @@ function commandsSection(ctx: Ctx): string {
 \`\`\`bash
 docker compose up --build      # build and start every service
 docker compose up -d           # background
-docker compose restart backend # ← after ANY backend code change (see gotchas)
+docker compose restart backend # ← after ANY backend code change (see gotchas)${
+      ctx.services.has('worker') ? '\ndocker compose up -d --build worker # the worker is rebuilt, never hot-reloaded' : ''
+    }
 docker compose down -v         # ⚠️ DESTRUCTIVE: wipes the database volume
 \`\`\``);
   }
@@ -77,7 +79,16 @@ function structureSection(ctx: Ctx): string {
     middleware/       # auth, role guard, error handler
     index.ts          # app bootstrap + graceful shutdown${ctx.hasDb ? '\n  prisma/schema.prisma' : ''}`);
   }
-  if (ctx.hasNginx) lines.push(`nginx/                # the only entrypoint: serves the SPA${ctx.hasBackend ? ', proxies /api' : ''}`);
+  if (ctx.services.has('worker')) {
+    lines.push(`worker/               # every Playwright import lives here — the API never launches a browser`);
+  }
+  if (ctx.hasNginx) {
+    lines.push(
+      ctx.hasBackend
+        ? `nginx/                # production entrypoint: serves the SPA, proxies /api`
+        : `Dockerfile            # production image: builds the SPA, nginx serves it\nnginx.conf`,
+    );
+  }
   if (!lines.length) return '';
   return '## Repository layout\n\n```\n' + lines.join('\n') + '\n```';
 }
@@ -111,6 +122,9 @@ function constraintsSection(ctx: Ctx): string {
   }
   if (ctx.has('feat-ai')) {
     rules.push('Model keys stay in backend env vars; the model id is configuration, never hard-coded.');
+  }
+  if (ctx.services.has('worker')) {
+    rules.push('The API never launches a browser: Playwright is imported by `worker/` only.');
   }
   return '## Constraints\n\n' + rules.map((r) => `- ${r}`).join('\n');
 }

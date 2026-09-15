@@ -56,7 +56,20 @@ storage without crashing, and nothing sensitive can be kept secret.${served}`;
     .join('');
 
   const uiRow = ctx.hasFrontend
-    ? '\n       ├─ /            → frontend (static bundle in prod, Vite dev server in dev)'
+    ? '\n       ├─ /            → frontend (static bundle)'
+    : '';
+  const dev = ctx.hasComposeDev
+    ? `
+
+Locally there is no nginx: Vite serves the UI on \`:5173\` and proxies \`/api\` to
+the backend, so the browser still sees a single origin.`
+    : '';
+  const worker = ctx.services.has('worker')
+    ? `
+
+A separate \`worker\` container runs every Playwright job. It has no HTTP surface:
+it claims work from PostgreSQL and writes results back, and the API never
+launches a browser.`
     : '';
   const storageRow = ctx.services.has('minio')
     ? '\n       ├─ /app-files/  → minio:9000 (presigned downloads)'
@@ -72,7 +85,7 @@ Browser
 In production nginx is the only service with a domain in Coolify: Traefik
 terminates TLS and hands every request to nginx, which serves the bundle and
 proxies \`/api\`${ctx.services.has('minio') ? ' and the storage bucket' : ''}. The backend, database${ctx.services.has('minio') ? ' and storage' : ''} get no domain
-and no published port, so nothing outside the stack can reach them.`
+and no published port, so nothing outside the stack can reach them.${dev}${worker}`
     : `The API is the only service. It listens on \`PORT\` and is reached directly.`;
 
   const authFlow = ctx.has('auth-better-auth-jwt')
@@ -102,6 +115,7 @@ ${deps.length ? `npm i ${deps.join(' ')}\n` : ''}${dev.length ? `npm i -D ${dev.
   const parts = [
     block('frontend/', ctx.deps.frontend, ctx.deps.frontendDev),
     block('backend/', ctx.deps.backend, ctx.deps.backendDev),
+    block('worker/', ctx.deps.worker, ctx.deps.workerDev),
   ].filter(Boolean);
 
   if (!parts.length) return '';
@@ -126,16 +140,26 @@ function planSection(ctx: Ctx): string {
 
   if (ctx.hasCoolify) {
     tasks.push(
-      'Ship the production compose file and multi-stage Dockerfiles in the same PR as the dev setup — retrofitting production later is how the memory and networking bugs below happen.',
+      ctx.hasBackend
+        ? 'Ship the production compose file and multi-stage Dockerfiles in the same PR as the dev setup — retrofitting production later is how the memory and networking bugs below happen.'
+        : 'Ship the root `Dockerfile` and `nginx.conf` with the first screen, so the production build is exercised from day one.',
     );
   }
   if (ctx.hasComposeDev) {
     tasks.push(
+      'Configure `frontend/vite.config.ts` for the dev container: `server.host: true`, `server.port: 5173`, a proxy from `/api` to `http://backend:3000`, and `server.watch.usePolling: true` — file events do not cross Windows bind mounts, the same reason ts-node-dev needs a restart.',
       '`docker compose up --build` must bring the whole stack up from a clean checkout with only `.env` filled in. Verify this, and only then move on.',
     );
   }
 
   tasks.push(...deploy);
+  if (ctx.hasCoolify) {
+    tasks.push(
+      ctx.hasBackend
+        ? 'Deploy on Coolify: a Docker Compose resource pointing at `docker-compose.coolify.yml`, the domain set on the nginx service, and the env vars pasted into the UI.'
+        : `Deploy on Coolify: a Dockerfile resource using the root \`Dockerfile\`, the domain set on it, its memory limit set to ${mb(ctx.memory.limits.nginx ?? 256)} in the resource limits, and every \`VITE_*\` value added as a build variable.`,
+    );
+  }
   tasks.push('Write a README that documents: how to run it, the env vars, and the deployment steps.');
 
   return '## Implementation plan\n\n' + tasks.map((t, i) => `${i + 1}. ${t}`).join('\n');
@@ -189,7 +213,7 @@ This project's share is **${availableGb.toFixed(1)} GB**, split across its conta
 | Service | mem_limit |
 |---|---|
 ${rows}
-
+${ctx.hasBackend ? '' : '\nThere is no compose file to carry this limit: set it on the Coolify resource itself.\n'}
 ${
     ctx.hasBackend
       ? `The API's V8 heap is capped at **${nodeHeap} MB**, below its container limit, so
@@ -210,7 +234,16 @@ function acceptanceSection(ctx: Ctx): string {
   if (ctx.hasFrontend) checks.push('The frontend builds (`npm run build`) with no TypeScript errors.');
   if (ctx.has('auth-better-auth-jwt')) checks.push('Sign-up, sign-in, refresh and sign-out all work end to end in the browser.');
   if (ctx.has('sb-rls')) checks.push('Every table has RLS enabled and an explicit policy per operation, verified while signed in as a normal user (not from the dashboard SQL editor).');
-  if (ctx.hasCoolify) checks.push('The production compose file declares no `networks:` block and every service has `mem_limit`, log rotation and a healthcheck.');
+  if (ctx.hasCoolify) {
+    checks.push(
+      ctx.hasBackend
+        ? 'The production compose file declares no `networks:` block and every service has `mem_limit`, log rotation and a healthcheck.'
+        : 'The root `Dockerfile` builds from a clean clone (`docker build .`) and the container serves the app on port 80.',
+    );
+  }
+  if (ctx.services.has('worker')) {
+    checks.push('The worker turns unhealthy when its heartbeat stops, and a run killed mid-way leaves no browser process behind.');
+  }
   checks.push('The README lets someone who has never seen the repo run it in under ten minutes.');
   return '## Definition of done\n\n' + checks.map((c) => `- [ ] ${c}`).join('\n');
 }

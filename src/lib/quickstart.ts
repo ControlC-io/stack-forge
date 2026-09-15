@@ -86,9 +86,9 @@ export function quickstart(ctx: Ctx): QuickstartStep[] {
         'Démarrez le stack en local et vérifiez que tout devient healthy',
       ),
       detail: L(
-        'En Windows abre http://127.0.0.1, no localhost.',
-        'On Windows open http://127.0.0.1, not localhost.',
-        'Sous Windows, ouvrez http://127.0.0.1, pas localhost.',
+        'Abre http://127.0.0.1:5173 (en Windows, no localhost).',
+        'Open http://127.0.0.1:5173 (on Windows, not localhost).',
+        'Ouvrez http://127.0.0.1:5173 (sous Windows, pas localhost).',
       ),
       command: 'docker compose up --build',
     });
@@ -128,13 +128,23 @@ export function quickstart(ctx: Ctx): QuickstartStep[] {
         'Once it works locally, deploy to Coolify',
         'Une fois que ça marche en local, déployez sur Coolify',
       ),
-      detail: L(
-        'Recurso Docker Compose → fichero docker-compose.coolify.yml → dominio sobre el servicio nginx → pega el .env en la UI.',
-        'Docker Compose resource → docker-compose.coolify.yml → domain on the nginx service → paste the .env into the UI.',
-        'Ressource Docker Compose → docker-compose.coolify.yml → domaine sur le service nginx → collez le .env dans l’UI.',
-      ),
+      detail: ctx.hasBackend
+        ? L(
+            'Recurso Docker Compose → fichero docker-compose.coolify.yml → dominio sobre el servicio nginx → pega el .env en la UI.',
+            'Docker Compose resource → docker-compose.coolify.yml → domain on the nginx service → paste the .env into the UI.',
+            'Ressource Docker Compose → docker-compose.coolify.yml → domaine sur le service nginx → collez le .env dans l’UI.',
+          )
+        : L(
+            'Recurso Dockerfile → el Dockerfile de la raíz → dominio → límite de memoria en los límites del recurso → valores VITE_* como variables de build.',
+            'Dockerfile resource → the root Dockerfile → domain → memory limit in the resource limits → VITE_* values as build variables.',
+            'Ressource Dockerfile → le Dockerfile racine → domaine → limite mémoire dans les limites de la ressource → valeurs VITE_* en variables de build.',
+          ),
     });
+  }
 
+  // Backups and a second look at swap only matter when there is a database of
+  // your own on the host.
+  if (ctx.hasCoolify && ctx.hasBackend) {
     steps.push({
       title: ctx.memory.swap === true
         ? L(

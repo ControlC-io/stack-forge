@@ -85,6 +85,12 @@ function simulations(): Sim[] {
   }
   add('10 every feature', loaded);
 
+  // The scraper shape (pmp-scrapper, vitals): a Playwright worker on a schedule.
+  let scraper = applyToggle(base, step('features'), 'feat-browser-worker');
+  scraper = applyToggle(scraper, step('features'), 'feat-cron');
+  scraper = applyToggle(scraper, step('team'), 'infra-ci');
+  add('10b browser worker + cron + CI', { ...scraper, meta: { ...META, appSize: 'large' } });
+
   // Every interface extra at once, on each shape.
   for (const stack of ['stack-fullstack', 'stack-static']) {
     // Toggling the already-selected branch would deselect it.
@@ -224,7 +230,8 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
   it('documents the project it actually generated', () => {
     const prompt = file('BOOTSTRAP_PROMPT.md') ?? '';
     expect(prompt.includes('docker compose up --build')).toBe(ctx.hasComposeDev);
-    expect(prompt.includes('docker-compose.coolify.yml')).toBe(ctx.hasCoolify);
+    // A static project deploys a single Dockerfile, with no compose file at all.
+    expect(prompt.includes('docker-compose.coolify.yml')).toBe(ctx.hasCoolify && ctx.hasBackend);
 
     // Whichever file carries the rules — AGENTS.md when two agents share them.
     const instructions = file('AGENTS.md') ?? file('CLAUDE.md') ?? file('.cursor/rules/project.mdc');
@@ -236,7 +243,14 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
 
   it('mentions a dependency only when it installs it', () => {
     const prompt = file('BOOTSTRAP_PROMPT.md') ?? '';
-    const all = [...ctx.deps.frontend, ...ctx.deps.frontendDev, ...ctx.deps.backend, ...ctx.deps.backendDev];
+    const all = [
+      ...ctx.deps.frontend,
+      ...ctx.deps.frontendDev,
+      ...ctx.deps.backend,
+      ...ctx.deps.backendDev,
+      ...ctx.deps.worker,
+      ...ctx.deps.workerDev,
+    ];
 
     // Only the install lines count: prose legitimately contains words like
     // "next", and a package name inside a sentence is not an install.
@@ -270,7 +284,8 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
         !ctx.hasBackend,
         ['backend:3000', '/api/health/live', 'Express', "The API's V8 heap", 'supertest', 'multer'],
       ],
-      [!ctx.hasFrontend, ['react-router-dom', 'Tailwind', 'Vite', 'the frontend', 'the frontends']],
+      [!ctx.hasFrontend, ['react-router', 'Tailwind', 'Vite', 'the frontend', 'the frontends']],
+      [!ctx.services.has('worker'), ['Playwright', 'Chromium']],
       [!ctx.hasDb && !ctx.hasSupabase, ['postgres', 'Postgres', 'prisma']],
       [!ctx.hasSupabase, ['anon key', 'Row Level Security']],
       [!ctx.has('feat-ai'), ['OPENROUTER_API_KEY', 'LLM_MODEL']],
@@ -290,6 +305,7 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
   it('installs dependencies only into workspaces that exist', () => {
     if (!ctx.hasBackend) expect([...ctx.deps.backend, ...ctx.deps.backendDev]).toEqual([]);
     if (!ctx.hasFrontend) expect([...ctx.deps.frontend, ...ctx.deps.frontendDev]).toEqual([]);
+    if (!ctx.services.has('worker')) expect([...ctx.deps.worker, ...ctx.deps.workerDev]).toEqual([]);
   });
 
   it('keeps every markdown heading non-empty', () => {

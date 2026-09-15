@@ -2,7 +2,7 @@
 # Stack Forge is a static SPA: build it once, serve it from nginx.
 
 # ---- build ----
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 # Coolify injects env vars as build ARGs. A buildtime NODE_ENV=production would
 # make npm skip devDependencies (vite, typescript) and the build would fail.

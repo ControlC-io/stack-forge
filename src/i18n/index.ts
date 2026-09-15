@@ -187,7 +187,7 @@ const UI = {
     fr: "Le client dispose déjà d'un ERP avec une API REST ; les clients doivent en être importés chaque nuit.",
   },
 
-  summarySelection: { es: 'Selección', en: 'Selection', fr: 'Sélection' },
+  summarySelection: { es: 'Tus respuestas', en: 'Your answers', fr: 'Vos réponses' },
   summaryEmpty: {
     es: 'Nada seleccionado todavía.',
     en: 'Nothing selected yet.',

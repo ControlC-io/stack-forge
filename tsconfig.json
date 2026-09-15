@@ -25,5 +25,8 @@
     }
   },
   "include": ["src"],
+  // Runs under Vitest in Node and shells out to Docker; the app build has no
+  // Node types and must not grow them for one test.
+  "exclude": ["src/**/*.docker.test.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

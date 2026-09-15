@@ -22,6 +22,8 @@ export interface MemoryPlan {
   limits: Partial<Record<ServiceId, number>>;
   /** V8 heap cap for the API, deliberately below its container limit. */
   nodeHeap: number;
+  /** V8 heap cap for the Playwright worker: lower still, the browser lives outside it. */
+  workerHeap: number;
   /** V8 heap cap for the build stages, which run on the production host. */
   buildHeap: number;
   /** null: nobody has confirmed whether the host has swap. */
@@ -39,9 +41,12 @@ const WEIGHTS: Record<string, number> = {
   minio: 0.1,
   email_service: 0.05,
   nginx: 0.04,
+  // As heavy as the API: a Chromium page easily outweighs a Node request.
+  worker: 0.45,
 };
 
 const BOUNDS: Record<string, { min: number; max: number }> = {
+  worker: { min: 768, max: 4096 },
   backend: { min: 512, max: 4096 },
   postgres: { min: 512, max: 4096 },
   minio: { min: 256, max: 1024 },
@@ -83,6 +88,7 @@ export function planMemory(meta: ProjectMeta, services: Set<ServiceId>): MemoryP
   const backendLimit = limits.backend ?? 1024;
   const nodeHeap = Math.max(256, roundTo(backendLimit * 0.65, 64));
   const buildHeap = clamp(nodeHeap, 512, 1024);
+  const workerHeap = Math.max(256, roundTo((limits.worker ?? 1024) * 0.4, 64));
 
   const warnings: string[] = [];
   const claimed = Object.values(limits).reduce((a, b) => a + b, 0);
@@ -120,6 +126,7 @@ export function planMemory(meta: ProjectMeta, services: Set<ServiceId>): MemoryP
     availableGb,
     limits,
     nodeHeap,
+    workerHeap,
     buildHeap,
     swap,
     warnings,

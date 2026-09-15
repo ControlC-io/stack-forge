@@ -127,10 +127,30 @@ Use \`multer\` with \`memoryStorage()\`, and keep the max file size identical in
 Develop against \`http://127.0.0.1\` and list both spellings in \`TRUSTED_ORIGINS\`.`,
   },
   {
-    id: 'vite-allowed-hosts',
-    title: 'Vite needs `allowedHosts: true` behind a proxy',
-    when: ['infra-compose-dev'],
-    body: `Vite 5.3+ blocks requests whose \`Host\` header it does not recognise. nginx proxies with the container's service name as the \`Host\` (\`Host: frontend\`), which Vite rejects with a 403 that looks like a routing bug. Set \`server.allowedHosts = true\` in \`vite.config.ts\`.`,
+    id: 'playwright-shm',
+    title: 'Chromium crashes on the default 64 MB `/dev/shm`',
+    when: ['feat-browser-worker'],
+    body: `Docker gives every container a 64 MB \`/dev/shm\`, and Chromium renders into shared memory. Large pages and long crawls then crash the renderer mid-run with "Target page, context or browser has been closed" — an error that points at your code, not at the container. Set \`shm_size\` on the worker in both compose files (512m here).`,
+  },
+  {
+    id: 'playwright-memory',
+    title: "Chromium's memory is outside the V8 heap — close every context",
+    when: ['feat-browser-worker'],
+    body: `\`--max-old-space-size\` caps the Node heap only; every browser process lives outside it. That is why the worker's heap cap sits much further below its \`mem_limit\` than the API's: the gap is the browser.
+
+A context that is never closed keeps its renderer alive, and open contexts pile up until the container is OOM-killed with exit 137. Always \`await context.close()\` in a \`finally\` block. The API never launches a browser: Playwright is imported by \`worker/\` only.`,
+  },
+  {
+    id: 'playwright-version-match',
+    title: 'The `playwright` package and the image browsers must be the same version',
+    when: ['feat-browser-worker'],
+    body: `The browsers ship inside \`mcr.microsoft.com/playwright:v<version>-noble\`, and the npm package only accepts the browsers of its own version: a mismatch fails at launch with "Executable doesn't exist". Keep one \`PLAYWRIGHT_VERSION\` for the image tag and the package, bump them together, and never run \`npx playwright install\` at container start.`,
+  },
+  {
+    id: 'worker-no-overlap',
+    title: 'Two runs of the same job must never overlap',
+    when: ['feat-browser-worker'],
+    body: `A slow run outlasts its own schedule, and an in-process "already running" flag is lost on every restart. Claim work with a database lock instead — \`SELECT ... FOR UPDATE SKIP LOCKED\` on the job row — so a second claimant skips the row rather than running the job twice.`,
   },
   {
     id: 'coolify-no-networks',

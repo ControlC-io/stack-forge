@@ -52,6 +52,8 @@ function variants(): Array<{ name: string; bp: Blueprint }> {
   out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-minio') });
   out.push({ name: 'email service', bp: applyToggle(base, step('features'), 'feat-email') });
   out.push({ name: 'team with CI', bp: applyToggle(base, step('team'), 'infra-ci') });
+  out.push({ name: 'browser worker', bp: applyToggle(base, step('features'), 'feat-browser-worker') });
+  out.push({ name: 'cron', bp: applyToggle(base, step('features'), 'feat-cron') });
   out.push({ name: 'claude design', bp: applyToggle(base, step('design'), 'design-claude') });
   out.push({ name: 'tiny custom host', bp: withMeta(base, custom('2', { serverSwap: true })) });
 
@@ -117,6 +119,7 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
       ['postgres', ctx.hasPostgres],
       ['minio', ctx.services.has('minio')],
       ['backend', ctx.hasBackend],
+      ['worker', ctx.services.has('worker')],
     ] as const) {
       expect(new RegExp(`^  ${service}:`, 'm').test(dev), `${service} in dev compose`).toBe(present);
       expect(new RegExp(`^  ${service}:`, 'm').test(prod), `${service} in prod compose`).toBe(present);
@@ -124,6 +127,11 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
   });
 
   it('gives every production service a memory limit, a healthcheck and log rotation', () => {
+    if (!ctx.hasBackend) {
+      // A single container deploys from a Dockerfile; there is no compose file.
+      expect(byPath('docker-compose.coolify.yml')).toBeUndefined();
+      return;
+    }
     const prod = byPath('docker-compose.coolify.yml')?.contents ?? '';
     // container_name is the only marker unique to a service block (top-level
     // keys like `volumes:` and the logging anchor share the same indentation).
@@ -141,7 +149,14 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
     } else {
       expect(byPath('backend/Dockerfile.prod')).toBeUndefined();
     }
-    expect(byPath('nginx/Dockerfile.prod')).toBeDefined();
+    if (ctx.hasBackend) {
+      expect(byPath('nginx/Dockerfile.prod')).toBeDefined();
+      expect(byPath('Dockerfile')).toBeUndefined();
+    } else {
+      expect(byPath('Dockerfile')?.contents).toContain('COPY nginx.conf /etc/nginx/nginx.conf');
+      expect(byPath('nginx.conf')).toBeDefined();
+      expect(byPath('nginx/Dockerfile.prod')).toBeUndefined();
+    }
   });
 
   it('writes the instructions for both agents, once', () => {
@@ -170,7 +185,27 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
 
   it('runs Docker locally only when there is a stack to run', () => {
     expect(Boolean(byPath('docker-compose.yml'))).toBe(ctx.hasBackend);
-    expect(Boolean(byPath('nginx/nginx.conf'))).toBe(ctx.hasBackend);
+    // Locally Vite serves the UI and proxies /api: there is no dev nginx at all.
+    expect(byPath('nginx/nginx.conf')).toBeUndefined();
+    if (ctx.hasBackend) {
+      const dev = byPath('docker-compose.yml')!.contents;
+      expect(dev).not.toMatch(/^ {2}nginx:/m);
+      expect(dev).toContain('${FRONTEND_PORT:-5173}:5173');
+    }
+  });
+
+  it('pins the Playwright package, the image and the build arg to one version', () => {
+    if (!ctx.services.has('worker')) {
+      expect(byPath('worker/Dockerfile.prod')).toBeUndefined();
+      return;
+    }
+    const version = ctx.env.find((v) => v.key === 'PLAYWRIGHT_VERSION')?.value;
+    expect(version).toBeTruthy();
+    expect(ctx.deps.worker).toContain(`playwright@${version}`);
+    expect(byPath('worker/Dockerfile.prod')!.contents).toContain(`ARG PLAYWRIGHT_VERSION=${version}`);
+    const prod = byPath('docker-compose.coolify.yml')!.contents;
+    expect(prod).toContain(`\${PLAYWRIGHT_VERSION:-${version}}`);
+    expect(prod).toMatch(/ {2}worker:[\s\S]*?shm_size: 512m/);
   });
 
   it('serves presigned downloads through nginx whenever there is storage', () => {
@@ -262,7 +297,7 @@ describe('prompt quality', () => {
     const sb = applyToggle(bp, step('stack'), 'stack-supabase');
     const text = generateFiles(sb)[0]!.contents;
     expect(text).toContain('Row Level Security');
-    expect(text).not.toContain('Express 4');
+    expect(text).not.toContain('Express 5');
     expect(text).not.toContain('prisma db push');
   });
 });
