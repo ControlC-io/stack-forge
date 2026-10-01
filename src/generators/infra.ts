@@ -57,7 +57,7 @@ export function generateComposeDev(ctx: Ctx): string {
     services.push(`  postgres:
     image: ${image}
     container_name: \${COMPOSE_PROJECT_NAME}_postgres
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRES_USER: \${POSTGRES_USER}
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
@@ -77,7 +77,7 @@ export function generateComposeDev(ctx: Ctx): string {
     services.push(`  minio:
     image: ${MINIO_IMAGE}
     container_name: \${COMPOSE_PROJECT_NAME}_minio
-    restart: unless-stopped
+    restart: "no"
     environment:
       MINIO_ROOT_USER: \${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: \${MINIO_ROOT_PASSWORD}
@@ -102,7 +102,7 @@ export function generateComposeDev(ctx: Ctx): string {
     services.push(`  backend:
     build: ./backend
     container_name: \${COMPOSE_PROJECT_NAME}_backend
-    restart: unless-stopped
+    restart: "no"
     env_file: .env
     ports:
       # Host binding for debugging only — the browser goes through Vite's proxy.
@@ -118,7 +118,7 @@ export function generateComposeDev(ctx: Ctx): string {
     services.push(`  email_service:
     build: ./email_service
     container_name: \${COMPOSE_PROJECT_NAME}_email
-    restart: unless-stopped
+    restart: "no"
     env_file: .env
     volumes:
       - ./email_service:/app
@@ -135,7 +135,7 @@ export function generateComposeDev(ctx: Ctx): string {
       args:
         PLAYWRIGHT_VERSION: \${PLAYWRIGHT_VERSION:-${playwrightVersion(ctx)}}
     container_name: \${COMPOSE_PROJECT_NAME}_worker
-    restart: unless-stopped
+    restart: "no"
     env_file: .env
     # Chromium crashes on Docker's default 64 MB /dev/shm.
     shm_size: 512m${ctx.hasPostgres ? '\n    depends_on:\n      postgres:\n        condition: service_healthy' : ''}`);
@@ -145,7 +145,7 @@ export function generateComposeDev(ctx: Ctx): string {
     services.push(`  frontend:
     build: ./frontend
     container_name: \${COMPOSE_PROJECT_NAME}_frontend
-    restart: unless-stopped
+    restart: "no"
     ports:
       # The one port you open in the browser. Vite proxies /api to the backend,
       # so the browser sees a single origin, as it does behind nginx in production.
@@ -167,6 +167,10 @@ export function generateComposeDev(ctx: Ctx): string {
 #
 # No nginx here: Vite serves the UI and proxies /api. No custom networks either,
 # same as production — every service reaches the others by name.
+#
+# restart: "no" on purpose. With unless-stopped every stack left running comes
+# back each time Docker Desktop starts, and a dozen idle projects end up fighting
+# over CPU and RAM. Start this one when you work on it, stop it when you are done.
 
 services:
 ${services.join('\n\n')}

@@ -125,6 +125,18 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
     }
   });
 
+  it('starts dev stacks only on demand, and keeps production restarting', () => {
+    const dev = byPath('docker-compose.yml')?.contents ?? '';
+    const prod = byPath('docker-compose.coolify.yml')?.contents ?? '';
+
+    // unless-stopped in dev brings every idle project back with Docker Desktop.
+    expect(/restart: (unless-stopped|always)/.test(dev), 'dev compose must not auto-restart').toBe(false);
+    expect((dev.match(/^ {4}container_name:/gm) ?? []).length).toBe((dev.match(/^ {4}restart: "no"$/gm) ?? []).length);
+    expect((prod.match(/^ {4}container_name:/gm) ?? []).length).toBe(
+      (prod.match(/^ {4}restart: unless-stopped$/gm) ?? []).length,
+    );
+  });
+
   it('gives every production service a memory limit, a healthcheck and log rotation', () => {
     if (!ctx.hasBackend) {
       // A single container deploys from a Dockerfile; there is no compose file.
