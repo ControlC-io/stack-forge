@@ -38,7 +38,7 @@ const HOST_RESERVE_GB = 1.2;
 const WEIGHTS: Record<string, number> = {
   backend: 0.45,
   postgres: 0.3,
-  minio: 0.1,
+  rustfs: 0.1,
   email_service: 0.05,
   nginx: 0.04,
   // As heavy as the API: a Chromium page easily outweighs a Node request.
@@ -49,7 +49,7 @@ const BOUNDS: Record<string, { min: number; max: number }> = {
   worker: { min: 768, max: 4096 },
   backend: { min: 512, max: 4096 },
   postgres: { min: 512, max: 4096 },
-  minio: { min: 256, max: 1024 },
+  rustfs: { min: 256, max: 1024 },
   email_service: { min: 128, max: 256 },
   nginx: { min: 128, max: 256 },
 };
@@ -99,7 +99,7 @@ export function planMemory(meta: ProjectMeta, services: Set<ServiceId>): MemoryP
   }
   if (claimed > availableGb * 1024) {
     warnings.push(
-      'The per-service minimums add up to more than the available memory. Either give the project a larger size or drop a service (MinIO and the email service are the usual candidates).',
+      'The per-service minimums add up to more than the available memory. Either give the project a larger size or drop a service (RustFS and the email service are the usual candidates).',
     );
   }
   if (shared) {

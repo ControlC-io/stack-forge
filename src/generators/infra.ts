@@ -1,9 +1,9 @@
 import { mb } from '@/lib/memory';
 import type { Ctx } from './context';
 
-// Pinned on purpose: `latest` moves without notice, and MinIO stripped the admin
-// console out of its community builds shortly after this release.
-const MINIO_IMAGE = 'minio/minio:RELEASE.2025-04-22T22-12-26Z';
+// Pinned on purpose: `latest` moves without notice. RustFS releases often, so
+// bump this deliberately and re-test uploads and presigned downloads.
+const RUSTFS_IMAGE = 'rustfs/rustfs:1.0.3';
 
 /** One Playwright version for the npm package, the image tag and the build arg. */
 function playwrightVersion(ctx: Ctx): string {
@@ -73,23 +73,24 @@ export function generateComposeDev(ctx: Ctx): string {
       retries: 10`);
   }
 
-  if (ctx.services.has('minio')) {
-    services.push(`  minio:
-    image: ${MINIO_IMAGE}
-    container_name: \${COMPOSE_PROJECT_NAME}_minio
+  if (ctx.services.has('rustfs')) {
+    services.push(`  rustfs:
+    image: ${RUSTFS_IMAGE}
+    container_name: \${COMPOSE_PROJECT_NAME}_rustfs
     restart: "no"
     environment:
-      MINIO_ROOT_USER: \${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: \${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001"
+      RUSTFS_ACCESS_KEY: \${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: \${S3_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
     ports:
       # Published because the browser fetches presigned URLs directly from here.
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 5`);
@@ -98,7 +99,7 @@ export function generateComposeDev(ctx: Ctx): string {
   if (ctx.hasBackend) {
     const deps: string[] = [];
     if (ctx.hasPostgres) deps.push('      postgres:\n        condition: service_healthy');
-    if (ctx.services.has('minio')) deps.push('      minio:\n        condition: service_healthy');
+    if (ctx.services.has('rustfs')) deps.push('      rustfs:\n        condition: service_healthy');
     services.push(`  backend:
     build: ./backend
     container_name: \${COMPOSE_PROJECT_NAME}_backend
@@ -157,7 +158,7 @@ export function generateComposeDev(ctx: Ctx): string {
 
   const volumes: string[] = [];
   if (ctx.hasPostgres) volumes.push('  postgres_data:');
-  if (ctx.services.has('minio')) volumes.push('  minio_data:');
+  if (ctx.services.has('rustfs')) volumes.push('  rustfs_data:');
 
   return `# Local development. Bind mounts + dev servers.
 # Production lives in docker-compose.coolify.yml — do not mix them.
@@ -210,22 +211,23 @@ export function generateComposeCoolify(ctx: Ctx): string {
       start_period: 10s`);
   }
 
-  if (ctx.services.has('minio')) {
-    services.push(`  minio:
-    image: ${MINIO_IMAGE}
-    container_name: ${ctx.slug}_minio
+  if (ctx.services.has('rustfs')) {
+    services.push(`  rustfs:
+    image: ${RUSTFS_IMAGE}
+    container_name: ${ctx.slug}_rustfs
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: \${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: \${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in env}
-    command: server /data
+      RUSTFS_ACCESS_KEY: \${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: \${S3_SECRET_KEY:?set S3_SECRET_KEY in env}
+      # No console in production: it has no domain and would only add surface.
+      RUSTFS_CONSOLE_ENABLE: "false"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     logging: *default-logging
-    mem_limit: ${limitOf('minio', 512)}
+    mem_limit: ${limitOf('rustfs', 512)}
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 5`);
@@ -234,7 +236,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
   if (ctx.hasBackend) {
     const deps: string[] = [];
     if (ctx.hasPostgres) deps.push('      postgres:\n        condition: service_healthy');
-    if (ctx.services.has('minio')) deps.push('      minio:\n        condition: service_healthy');
+    if (ctx.services.has('rustfs')) deps.push('      rustfs:\n        condition: service_healthy');
     services.push(`  backend:
     build:
       context: ./backend
@@ -338,7 +340,7 @@ export function generateComposeCoolify(ctx: Ctx): string {
 
   const volumes: string[] = [];
   if (ctx.hasPostgres) volumes.push('  postgres_data:');
-  if (ctx.services.has('minio')) volumes.push('  minio_data:');
+  if (ctx.services.has('rustfs')) volumes.push('  rustfs_data:');
 
   return `# Production deployment for Coolify.
 #
@@ -577,14 +579,14 @@ export function generateNginxConf(ctx: Ctx): string {
 `
     : '';
 
-  // MinIO has no domain of its own, so presigned download URLs are signed for
-  // this origin (MINIO_PUBLIC_URL) and nginx forwards the bucket path. Host must
+  // RustFS has no domain of its own, so presigned download URLs are signed for
+  // this origin (S3_PUBLIC_URL) and nginx forwards the bucket path. Host must
   // stay intact or the signature no longer matches.
-  const storage = ctx.services.has('minio')
+  const storage = ctx.services.has('rustfs')
     ? `
-    # Keep in sync with MINIO_BUCKET.
+    # Keep in sync with S3_BUCKET.
     location /app-files/ {
-      proxy_pass http://minio:9000;
+      proxy_pass http://rustfs:9000;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
       proxy_set_header Host $host;

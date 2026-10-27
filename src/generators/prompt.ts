@@ -48,7 +48,7 @@ storage without crashing, and nothing sensitive can be kept secret.${served}`;
 
   const backing = [
     ctx.hasPostgres ? 'postgres:5432' : '',
-    ctx.services.has('minio') ? 'minio:9000' : '',
+    ctx.services.has('rustfs') ? 'rustfs:9000' : '',
     ctx.services.has('email_service') ? 'email_service:3001' : '',
   ].filter(Boolean);
   const backingTree = backing
@@ -71,8 +71,8 @@ A separate \`worker\` container runs every Playwright job. It has no HTTP surfac
 it claims work from PostgreSQL and writes results back, and the API never
 launches a browser.`
     : '';
-  const storageRow = ctx.services.has('minio')
-    ? '\n       ├─ /app-files/  → minio:9000 (presigned downloads)'
+  const storageRow = ctx.services.has('rustfs')
+    ? '\n       ├─ /app-files/  → rustfs:9000 (presigned downloads)'
     : '';
 
   const topology = ctx.hasNginx
@@ -84,7 +84,7 @@ Browser
 
 In production nginx is the only service with a domain in Coolify: Traefik
 terminates TLS and hands every request to nginx, which serves the bundle and
-proxies \`/api\`${ctx.services.has('minio') ? ' and the storage bucket' : ''}. The backend, database${ctx.services.has('minio') ? ' and storage' : ''} get no domain
+proxies \`/api\`${ctx.services.has('rustfs') ? ' and the storage bucket' : ''}. The backend, database${ctx.services.has('rustfs') ? ' and storage' : ''} get no domain
 and no published port, so nothing outside the stack can reach them.${dev}${worker}`
     : `The API is the only service. It listens on \`PORT\` and is reached directly.`;
 

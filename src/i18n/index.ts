@@ -116,9 +116,9 @@ const UI = {
     fr: 'Chaque conteneur reçoit un mem_limit. S’il le dépasse, il meurt avec exit 137 même si la machine a de la RAM libre : les limites viennent donc du vrai serveur.',
   },
   whyAppSize: {
-    es: 'El VPS lo comparten varios proyectos. Esta es la parte que se lleva esta app, repartida entre la API, la base de datos y MinIO.',
-    en: 'Several projects share the VPS. This is the share of this app, split between the API, the database and MinIO.',
-    fr: 'Plusieurs projets partagent le VPS. C’est la part de cette app, répartie entre l’API, la base de données et MinIO.',
+    es: 'El VPS lo comparten varios proyectos. Esta es la parte que se lleva esta app, repartida entre la API, la base de datos y RustFS.',
+    en: 'Several projects share the VPS. This is the share of this app, split between the API, the database and RustFS.',
+    fr: 'Plusieurs projets partagent le VPS. C’est la part de cette app, répartie entre l’API, la base de données et RustFS.',
   },
   whyServerRam: {
     es: 'Sin la RAM real, los límites de memoria serían una suposición.',

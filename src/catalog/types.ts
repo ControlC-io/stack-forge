@@ -22,7 +22,7 @@ export interface EnvVar {
 
 export type ServiceId =
   | 'postgres'
-  | 'minio'
+  | 'rustfs'
   | 'nginx'
   | 'backend'
   | 'frontend'

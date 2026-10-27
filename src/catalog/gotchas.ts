@@ -95,26 +95,26 @@ Issue the app JWT from the **existing session** instead of re-verifying the pass
 If users look logged in but every API call 401s, the JWT is missing → \`localStorage.clear()\` and re-login.`,
   },
   {
-    id: 'minio-two-clients',
+    id: 'storage-two-clients',
     title: 'Storage needs two separate S3 clients',
-    when: ['storage-minio'],
-    body: `Presigned URLs are signed with the host in the endpoint. Sign with \`minio:9000\` and let the browser connect to \`127.0.0.1:9000\` and the \`Host\` mismatch invalidates the signature (connection reset).
+    when: ['storage-rustfs'],
+    body: `Presigned URLs are signed with the host in the endpoint. Sign with \`rustfs:9000\` and let the browser connect to \`127.0.0.1:9000\` and the \`Host\` mismatch invalidates the signature (connection reset).
 
 | Client | Endpoint | Used for |
 |---|---|---|
-| \`getClient()\` | \`MINIO_ENDPOINT\` (\`http://minio:9000\`) | bucket ops, server-side up/downloads |
-| \`getSigningClient()\` | \`MINIO_PUBLIC_URL\` (\`http://127.0.0.1:9000\`) | presigned GET URLs for the browser |
+| \`getClient()\` | \`S3_ENDPOINT\` (\`http://rustfs:9000\`) | bucket ops, server-side up/downloads |
+| \`getSigningClient()\` | \`S3_PUBLIC_URL\` (\`http://127.0.0.1:9000\`) | presigned GET URLs for the browser |
 
-In production the browser cannot reach MinIO at all: it has no domain. Set \`MINIO_PUBLIC_URL\` to the app's own origin (\`https://<domain>\`) and let nginx proxy \`/<bucket>/\` to \`minio:9000\` with \`proxy_set_header Host $host\` — the signed host then matches what the browser sends. Renaming \`MINIO_BUCKET\` means renaming that nginx location too.`,
+In production the browser cannot reach RustFS at all: it has no domain. Set \`S3_PUBLIC_URL\` to the app's own origin (\`https://<domain>\`) and let nginx proxy \`/<bucket>/\` to \`rustfs:9000\` with \`proxy_set_header Host $host\` — the signed host then matches what the browser sends. Renaming \`S3_BUCKET\` means renaming that nginx location too.`,
   },
   {
     id: 'upload-proxy',
-    title: 'Proxy uploads through the API, not browser → MinIO',
-    when: ['storage-minio'],
-    body: `Direct browser → MinIO \`PUT\` fails on Docker Desktop Windows (\`ERR_CONNECTION_RESET\` on large files). Upload through the API instead:
+    title: 'Proxy uploads through the API, not browser → RustFS',
+    when: ['storage-rustfs'],
+    body: `Direct browser → RustFS \`PUT\` fails on Docker Desktop Windows (\`ERR_CONNECTION_RESET\` on large files). Upload through the API instead:
 
 \`\`\`
-Browser → POST /api/upload/file (multipart, nginx → Express) → MinIO PutObjectCommand
+Browser → POST /api/upload/file (multipart, nginx → Express) → RustFS PutObjectCommand
 \`\`\`
 Use \`multer\` with \`memoryStorage()\`, and keep the max file size identical in **both** nginx (\`client_max_body_size\`) and the multer limits — a mismatch produces an opaque 413.`,
   },

@@ -69,7 +69,7 @@ function simulations(): Sim[] {
 
   // Stripping the self-hosted stack down: no login, no files, no extras.
   let bare = base;
-  for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-minio']) {
+  for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-rustfs']) {
     bare = applyToggle(bare, step('features'), id);
   }
   add('09 bare API', bare);
@@ -285,7 +285,7 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
       [!ctx.hasDb && !ctx.hasSupabase, ['postgres', 'Postgres', 'prisma']],
       [!ctx.hasSupabase, ['anon key', 'Row Level Security']],
       [!ctx.has('feat-ai'), ['OPENROUTER_API_KEY', 'LLM_MODEL']],
-      [!ctx.services.has('minio'), ['MinIO', 'presigned']],
+      [!ctx.services.has('rustfs'), ['RustFS', 'presigned']],
     ];
 
     for (const [applies, phrases] of forbidden) {

@@ -76,7 +76,7 @@ describe('selection rules', () => {
 
   it('keeps a step the user emptied on purpose empty', () => {
     let bp = emptyBlueprint();
-    for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-minio']) {
+    for (const id of ['rbac-simple', 'auth-better-auth-jwt', 'storage-rustfs']) {
       bp = applyToggle(bp, step('features'), id);
     }
     expect(bp.selection.features).toEqual([]);
@@ -102,7 +102,7 @@ describe('selection rules', () => {
   it('drops everything server-side for a static project', () => {
     const bp = applyToggle(emptyBlueprint(), step('stack'), 'stack-static');
     const selected = ids(bp);
-    for (const id of ['backend-express', 'db-postgres-prisma', 'auth-better-auth-jwt', 'storage-minio']) {
+    for (const id of ['backend-express', 'db-postgres-prisma', 'auth-better-auth-jwt', 'storage-rustfs']) {
       expect(selected.has(id), `${id} leaked into a static project`).toBe(false);
     }
   });

@@ -49,7 +49,7 @@ function variants(): Array<{ name: string; bp: Blueprint }> {
     name: 'no auth',
     bp: applyToggle(applyToggle(base, step('features'), 'rbac-simple'), step('features'), 'auth-better-auth-jwt'),
   });
-  out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-minio') });
+  out.push({ name: 'no storage', bp: applyToggle(base, step('features'), 'storage-rustfs') });
   out.push({ name: 'email service', bp: applyToggle(base, step('features'), 'feat-email') });
   out.push({ name: 'browser worker', bp: applyToggle(base, step('features'), 'feat-browser-worker') });
   out.push({ name: 'cron', bp: applyToggle(base, step('features'), 'feat-cron') });
@@ -116,7 +116,7 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
 
     for (const [service, present] of [
       ['postgres', ctx.hasPostgres],
-      ['minio', ctx.services.has('minio')],
+      ['rustfs', ctx.services.has('rustfs')],
       ['backend', ctx.hasBackend],
       ['worker', ctx.services.has('worker')],
     ] as const) {
@@ -222,7 +222,7 @@ describe.each(variants())('generated output — $name', ({ bp }) => {
 
   it('serves presigned downloads through nginx whenever there is storage', () => {
     const prod = byPath('nginx/nginx.coolify.conf')?.contents ?? '';
-    expect(prod.includes('location /app-files/')).toBe(ctx.services.has('minio'));
+    expect(prod.includes('location /app-files/')).toBe(ctx.services.has('rustfs'));
   });
 
   it('never describes a network split the production compose does not have', () => {

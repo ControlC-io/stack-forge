@@ -145,7 +145,7 @@ export function normalize(bp: Blueprint): Blueprint {
 
 /**
  * Drop selections whose prerequisites just disappeared. Without this you can
- * select "file uploads" (requires MinIO), switch storage to none, and generate
+ * select "file uploads" (requires RustFS), switch storage to none, and generate
  * a prompt describing an upload endpoint with nowhere to put the bytes.
  */
 function prune(sel: Selection): Selection {
