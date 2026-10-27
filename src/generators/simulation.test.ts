@@ -284,7 +284,7 @@ describe.each(simulations())('simulation — $name', ({ bp }) => {
       [!ctx.services.has('worker'), ['Playwright', 'Chromium']],
       [!ctx.hasDb && !ctx.hasSupabase, ['postgres', 'Postgres', 'prisma']],
       [!ctx.hasSupabase, ['anon key', 'Row Level Security']],
-      [!ctx.has('feat-ai'), ['OPENROUTER_API_KEY', 'LLM_MODEL']],
+      [!ctx.has('feat-ai'), ['REQUESTY_API_KEY', 'LLM_MODEL']],
       [!ctx.services.has('rustfs'), ['RustFS', 'presigned']],
     ];
 

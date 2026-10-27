@@ -217,24 +217,25 @@ export const STEPS: Step[] = [
         id: 'feat-ai',
         label: L('Inteligencia artificial', 'Artificial intelligence', 'Intelligence artificielle'),
         description: L(
-          'Chat, embeddings o lectura de documentos con LLMs, vía OpenRouter: Anthropic, OpenAI, Google y el resto con una sola clave.',
-          'Chat, embeddings or document reading with LLMs, through OpenRouter: Anthropic, OpenAI, Google and the rest with one key.',
-          'Chat, embeddings ou lecture de documents avec des LLM, via OpenRouter : Anthropic, OpenAI, Google et les autres avec une seule clé.',
+          'Chat, embeddings o lectura de documentos con LLMs, vía Requesty (región UE): Anthropic, OpenAI, Google y el resto con una sola clave.',
+          'Chat, embeddings or document reading with LLMs, through Requesty (EU region): Anthropic, OpenAI, Google and the rest with one key.',
+          'Chat, embeddings ou lecture de documents avec des LLM, via Requesty (région UE) : Anthropic, OpenAI, Google et les autres avec une seule clé.',
         ),
         why: L(
           'Una sola clave para cualquier modelo: pasar de Claude a GPT o Gemini es cambiar un texto en el .env, sin tocar código. Abre una pregunta más sobre para qué la usas.',
           'One key for any model: moving from Claude to GPT or Gemini is a string in .env, no code change. It opens one more question about what you use it for.',
           'Une seule clé pour tous les modèles : passer de Claude à GPT ou Gemini, c’est changer une chaîne dans le .env, sans toucher au code. Ouvre une question de plus sur l’usage.',
         ),
-        spec: 'LLM access through OpenRouter (one API key for Anthropic, OpenAI, Google and other vendors; model selected by id)',
+        spec: 'LLM access through Requesty, EU endpoint (one API key for Anthropic, OpenAI, Google and other vendors; model selected by id)',
         deps: { backend: ['openai'] },
         env: [
-          { key: 'OPENROUTER_API_KEY', secret: true },
+          { key: 'REQUESTY_API_KEY', secret: true },
+          { key: 'REQUESTY_BASE_URL', value: 'https://router.eu.requesty.ai/v1', comment: 'EU endpoint — company policy, do not switch to the global router' },
           { key: 'LLM_MODEL', value: 'anthropic/claude-sonnet-5' },
         ],
         notes: [
           'API keys live only in backend environment variables — never in the database, never in the frontend bundle.',
-          'OpenRouter speaks the OpenAI protocol, so the official `openai` SDK works by pointing `baseURL` at it. Model ids are `vendor/model` (`anthropic/...`, `openai/...`, `google/...`); switching vendor is a change to `LLM_MODEL`, never to code.',
+          'Requesty speaks the OpenAI protocol, so the official `openai` SDK works with `baseURL` set to `REQUESTY_BASE_URL`. Model ids are `vendor/model` (`anthropic/...`, `openai/...`, `google/...`); switching vendor is a change to `LLM_MODEL`, never to code. List the available ids with `GET $REQUESTY_BASE_URL/models`.',
         ],
         tasks: [
           'Route every model call through one provider module so the model id, the timeout and the retry policy live in a single place.',
@@ -382,6 +383,7 @@ export const STEPS: Step[] = [
         requires: ['db-pgvector'],
         env: [{ key: 'EMBEDDING_MODEL', value: 'openai/text-embedding-3-small' }],
         notes: [
+          'Embeddings go through the same Requesty client as chat (`REQUESTY_API_KEY`, `baseURL` = `REQUESTY_BASE_URL`, `POST /embeddings`). There is no second provider or key.',
           'Store the embedding model id next to every vector: re-indexing with a different model silently degrades search until everything is regenerated.',
         ],
       },
