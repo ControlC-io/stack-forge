@@ -312,6 +312,14 @@ describe('prompt quality', () => {
     expect(text).not.toContain('Express 5');
     expect(text).not.toContain('prisma db push');
   });
+
+  it('points a Claude Design project at the artifact link, not a manual export', () => {
+    const files = generateFiles(applyToggle(bp, step('design'), 'design-claude'));
+    const all = files.map((f) => f.contents).join('\n');
+    expect(all).toContain('design/README.md');
+    expect(all).toContain('artifact');
+    expect(all).not.toContain('handoff bundle');
+  });
 });
 
 describe('server sizing reaches the generated files', () => {
